@@ -1,0 +1,534 @@
+import { ArcList, ArcListItem, LengthMetrics, router } from '@kit.ArkUI';
+import { WebSocketManager } from '../model/WebSocketManager';
+import { ChatStore, CachedMessage, ChatItem } from '../model/ChatStore';
+import { MessageFormatter } from '../model/MessageFormatter';
+import { MessageCenter } from '../model/MessageCenter';
+import { OneBotMessage, OneBotRequest } from '../model/OneBotModel';
+import { ConfigManager } from '../model/ConfigManager';
+import { MsgBubble } from '../components/MsgBubble';
+import { FaceStore } from '../model/FaceStore';
+
+class RouteParams {
+  peer_id: number = 0;
+  peer_name: string = '';
+  chat_type: string = '';
+}
+
+@Entry
+@Component
+struct ChatDetailPage {
+  private wsManager: WebSocketManager = WebSocketManager.getInstance();
+  private chatStore: ChatStore = ChatStore.getInstance();
+  private configManager: ConfigManager = ConfigManager.getInstance();
+  private msgCenter: MessageCenter = MessageCenter.getInstance();
+  private selfId: number = 0;
+  @State messages: CachedMessage[] = [];
+  @State renderKey: number = 0;
+  scrollScroller: Scroller = new Scroller();
+
+  @State peerName: string = '';
+  @State peerId: number = 0;
+  @State chatType: string = 'private';
+  @State chatId: string = '';
+  @State inputText: string = '';
+  @State title: string = '';
+  @State loading: boolean = true;
+  @State menuMsg: CachedMessage | null = null;
+
+  aboutToAppear(): void {
+    let raw = this.getUIContext().getRouter().getParams() as RouteParams;
+    if (raw && raw.peer_id) {
+      this.peerId = raw.peer_id || 0;
+      this.peerName = raw.peer_name || '';
+      this.chatType = raw.chat_type || 'private';
+      this.chatId = ChatStore.chatId(this.chatType, this.peerId);
+      this.title = this.peerName || this.chatId;
+    } else {
+      this.chatId = 'default';
+      this.title = '聊天';
+    }
+    this.initPage();
+  }
+
+  aboutToDisappear(): void {
+    this.msgCenter.unregisterChatHandler(this.chatId);
+  }
+
+  async initPage(): Promise<void> {
+    let context: Context = this.getUIContext().getHostContext() as Context;
+    await this.chatStore.initDb(context);
+    await this.configManager.initDb(context);
+
+    this.selfId = this.msgCenter.getSelfId();
+    if (this.selfId === 0) {
+      let selfIdStr = await this.configManager.getString('self_id', '0');
+      this.selfId = parseInt(selfIdStr) || 0;
+      MessageFormatter.setSelfId(this.selfId);
+    }
+
+    this.msgCenter.registerChatHandler(this.chatId, (msg: OneBotMessage) => {
+      this.onWsMessage(msg);
+    });
+
+    await this.loadHistory();
+  }
+
+  async loadHistory(): Promise<void> {
+    let cached: CachedMessage[] = await this.chatStore.getMessages(this.chatId, 100);
+    for (let cm of cached) {
+      cm.isSelf = cm.userId === this.selfId;
+    }
+    this.messages = cached;
+    this.renderKey++;
+    this.loading = false;
+    this.scrollToBottom();
+
+    let req: OneBotRequest = OneBotRequest.createGetMsgHistory(
+      this.peerId, this.chatType, undefined, 20);
+    this.wsManager.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+      this.handleHistoryResponse(data);
+    });
+  }
+
+  handleHistoryResponse(data: Record<string, Object>): void {
+    try {
+      let retcode = data['retcode'] as number ?? 1;
+      if (retcode !== 0) {
+        return;
+      }
+      let payload = data['data'] as Record<string, Object>;
+      if (payload === undefined) {
+        return;
+      }
+      let msgArr = payload['messages'] as Object[];
+      if (msgArr === undefined || msgArr.length === 0) {
+        return;
+      }
+
+      let existingIds: Set<number> = new Set();
+      for (let m of this.messages) {
+        if (m.messageId > 0) {
+          existingIds.add(m.messageId);
+        }
+      }
+
+      let newCount = 0;
+      let newMessages: CachedMessage[] = [...this.messages];
+      for (let item of msgArr) {
+        let obj = item as Record<string, Object>;
+        let msgId = parseInt(String(obj['message_id'] || '0'));
+        if (msgId > 0 && existingIds.has(msgId)) {
+          continue;
+        }
+        let cm = new CachedMessage();
+        cm.messageId = msgId;
+        cm.chatId = this.chatId;
+        let sender = obj['sender'] as Record<string, Object> || {};
+        cm.userId = parseInt(String(sender['user_id'] || '0'));
+        cm.nickname = String(sender['nickname'] || '');
+        cm.content = JSON.stringify(obj['message'] || []);
+        cm.rawMessage = String(obj['raw_message'] || '');
+        let msgSegs = obj['message'] as Object[];
+        if (msgSegs && msgSegs.length > 0) {
+          let parts: string[] = [];
+          for (let seg of msgSegs) {
+            let s = seg as Record<string, Object>;
+            let segType = s['type'] as string || '';
+            let segData = s['data'] as Record<string, Object> || {};
+            if (segType === 'text' && segData['text']) {
+              parts.push(segData['text'] as string);
+            } else if (segType === 'image') {
+              parts.push('[图片]');
+            } else if (segType === 'face') {
+              parts.push('[表情]');
+            } else if (segType === 'at') {
+              parts.push('@' + (segData['qq'] || ''));
+            } else if (segType === 'reply') {
+              parts.push('[回复]');
+            } else if (segType === 'record') {
+              parts.push('[语音]');
+            } else if (segType === 'video') {
+              parts.push('[视频]');
+            } else if (segType === 'file') {
+              parts.push('[文件]');
+            }
+          }
+          if (parts.length > 0) {
+            cm.rawMessage = parts.join('');
+          }
+        }
+        cm.msgType = 'text';
+        if (msgSegs && msgSegs.length > 0) {
+          let first = msgSegs[0] as Record<string, Object>;
+          let firstType = first['type'] as string || '';
+          if (firstType !== '') {
+            cm.msgType = firstType;
+          }
+        }
+        cm.timestamp = parseInt(String(obj['time'] || '0')) * 1000;
+        cm.isSelf = cm.userId === this.selfId;
+
+        this.chatStore.saveMessage(cm);
+        newMessages.push(cm);
+        newCount++;
+      }
+
+      if (newCount > 0) {
+        newMessages.sort((a: CachedMessage, b: CachedMessage) => a.timestamp - b.timestamp);
+        this.messages = newMessages;
+        this.renderKey++;
+        this.scrollToBottom();
+      }
+    } catch (e) {
+    }
+  }
+
+  onWsMessage(msg: OneBotMessage): void {
+    let msgChatId: string = msg.isGroupChat() ?
+      'group_' + msg.group_id : 'private_' + msg.user_id;
+
+    if (msg.post_type === 'message' && msgChatId === this.chatId) {
+      let cm: CachedMessage = MessageFormatter.toCachedMessage(msg, this.selfId);
+      let newMessages = [...this.messages, cm];
+      if (newMessages.length > 500) {
+        newMessages = newMessages.slice(newMessages.length - 500);
+      }
+      this.messages = newMessages;
+      this.renderKey++;
+      this.scrollToBottom();
+    }
+  }
+
+  scrollToBottom(): void {
+    setTimeout(() => {
+      this.scrollScroller.scrollEdge(Edge.Bottom);
+    }, 100);
+  }
+
+  sendText(text: string): void {
+    if (text.trim() === '') {
+      return;
+    }
+    let req: OneBotRequest = OneBotRequest.createSendMsg(
+      this.peerId, this.chatType, text);
+    this.wsManager.sendRequest(req);
+
+    let localMsg: CachedMessage = new CachedMessage();
+    localMsg.messageId = -1;
+    localMsg.chatId = this.chatId;
+    localMsg.userId = this.selfId;
+    localMsg.nickname = '我';
+    let textData: Record<string, Object> = { 'text': text };
+    let textSeg: Record<string, Object> = { 'type': 'text', 'data': textData };
+    let contentArr: Record<string, Object>[] = [textSeg];
+    localMsg.content = JSON.stringify(contentArr);
+    localMsg.rawMessage = text;
+    localMsg.msgType = 'text';
+    localMsg.timestamp = Date.now();
+    localMsg.isSelf = true;
+
+    this.chatStore.saveMessage(localMsg);
+    let updated = [...this.messages, localMsg];
+    if (updated.length > 500) {
+      updated = updated.slice(updated.length - 500);
+    }
+    this.messages = updated;
+    this.renderKey++;
+    this.scrollToBottom();
+
+    let chatItem: ChatItem = new ChatItem();
+    chatItem.chatType = this.chatType;
+    chatItem.peerId = this.peerId;
+    chatItem.chatId = this.chatId;
+    chatItem.peerName = this.peerName;
+    chatItem.lastMessage = text.length > 30 ? text.substring(0, 30) : text;
+    chatItem.lastMessageTime = Date.now();
+    this.chatStore.upsertChat(chatItem);
+  }
+
+  shouldShowTime(currentIndex: number): boolean {
+    if (currentIndex === 0) {
+      return true;
+    }
+    let prev = this.messages[currentIndex - 1];
+    let cur = this.messages[currentIndex];
+    if (!prev || !cur) {
+      return false;
+    }
+    return (cur.timestamp - prev.timestamp) > 120000;
+  }
+
+  showMenu(msg: CachedMessage): void {
+    this.menuMsg = msg;
+  }
+
+  dismissMenu(): void {
+    this.menuMsg = null;
+  }
+
+  hasImageSeg(msg: CachedMessage): boolean {
+    try {
+      let arr = JSON.parse(msg.content || '[]') as Object[];
+      for (let item of arr) {
+        let obj = item as Record<string, Object>;
+        if ((obj['type'] as string) === 'image') {
+          return true;
+        }
+      }
+    } catch (_e) {
+    }
+    return false;
+  }
+
+  getMsgPlainText(msg: CachedMessage): string {
+    try {
+      let arr = JSON.parse(msg.content || '[]') as Object[];
+      let parts: string[] = [];
+      for (let item of arr) {
+        let obj = item as Record<string, Object>;
+        let segType = obj['type'] as string || '';
+        let data = obj['data'] as Record<string, Object> || {};
+        if (segType === 'text') {
+          parts.push(data['text'] as string || '');
+        } else if (segType === 'face') {
+          let emoji = FaceStore.getFace(parseInt(data['id'] as string || '0'));
+          parts.push(emoji !== '' ? emoji : '[表情]');
+        } else if (segType === 'image') {
+          parts.push('[图片]');
+        }
+      }
+      return parts.join('');
+    } catch (_e) {
+      return msg.rawMessage || '';
+    }
+  }
+
+  copyMsgText(msg: CachedMessage): void {
+    // 复制到剪贴板
+    let text = this.getMsgPlainText(msg);
+    this.inputText = text;
+    this.dismissMenu();
+  }
+
+  revokeMsg(msg: CachedMessage): void {
+    this.dismissMenu();
+    // 构造撤回请求
+    let req = new OneBotRequest();
+    req.action = 'delete_msg';
+    req.params = { 'message_id': msg.messageId };
+    this.wsManager.sendRequest(req);
+  }
+
+  replyMsg(msg: CachedMessage): void {
+    this.dismissMenu();
+    // 在输入框中插入回复引用
+    let replyText = '[回复] ' + (msg.rawMessage || '').substring(0, 20);
+    this.inputText = replyText + ' ' + this.inputText;
+  }
+
+  getAllMediaUrls(): string[] {
+    let result: string[] = [];
+    for (let msg of this.messages) {
+      try {
+        let arr = JSON.parse(msg.content || '[]') as Object[];
+        for (let item of arr) {
+          let obj = item as Record<string, Object>;
+          let segType = obj['type'] as string || '';
+          if (segType === 'image' || segType === 'video') {
+            let data = obj['data'] as Record<string, Object> || {};
+            let url = data['url'] as string || data['file'] as string || '';
+            if (url !== '') {
+              result.push(url);
+            }
+          }
+        }
+      } catch (_e) {
+      }
+    }
+    return result;
+  }
+
+  build() {
+    Stack() {
+      ArcList({ scroller: this.scrollScroller }) {
+        // 标题
+        ArcListItem() {
+          Text(this.title)
+            .fontSize(16)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 10 })
+        }
+        .width('82%')
+
+        // 加载状态
+        if (this.loading) {
+          ArcListItem() {
+            Column() {
+              LoadingProgress()
+                .width(30)
+                .height(30)
+                .color('#C0B8E0')
+              Text('加载中...')
+                .fontSize(12)
+                .fontColor('#666666')
+                .margin({ top: 8 })
+            }
+            .width('100%')
+            .alignItems(HorizontalAlign.Center)
+            .padding({ top: 40, bottom: 40 })
+          }
+          .width('82%')
+        }
+
+        // 空消息状态
+        if (!this.loading && this.messages.length === 0) {
+          ArcListItem() {
+            Column() {
+              Text('暂无消息')
+                .fontSize(14)
+                .fontColor('#666666')
+              Text('发送消息开始对话')
+                .fontSize(11)
+                .fontColor('#444444')
+                .margin({ top: 4 })
+            }
+            .width('100%')
+            .alignItems(HorizontalAlign.Center)
+            .padding({ top: 40, bottom: 40 })
+          }
+          .width('82%')
+        }
+
+        // 消息列表
+        ForEach(this.messages, (msg: CachedMessage, index: number) => {
+          ArcListItem() {
+            MsgBubble({
+              msg: msg,
+              selfId: this.selfId,
+              showTime: this.shouldShowTime(index),
+              allMediaUrls: this.getAllMediaUrls(),
+              allMessages: this.messages,
+              onLongPress: (m: CachedMessage) => { this.showMenu(m); }
+            })
+          }
+          .width('84%')
+          .autoScale(false)
+        }, (msg: CachedMessage, index: number) =>
+          this.renderKey + '_' + msg.messageId.toString() + '_' + index.toString())
+
+        // 输入框
+        ArcListItem() {
+          Row() {
+            TextInput({ text: this.inputText, placeholder: '输入消息' })
+              .width('100%')
+              .height(36)
+              .fontSize(13)
+              .fontColor(Color.White)
+              .placeholderColor('#555555')
+              .backgroundColor('#222222')
+              .borderRadius(18)
+              .padding({ left: 12, right: 12 })
+              .onChange((value: string) => {
+                this.inputText = value;
+              })
+              .onSubmit(() => {
+                this.sendText(this.inputText);
+                this.inputText = '';
+              })
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.Center)
+          .padding({ top: 8, bottom: 8 })
+        }
+        .width('82%')
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(Color.Black)
+      .scrollBar(BarState.Off)
+      .space(LengthMetrics.vp(0))
+      .padding({ left: 12, right: 12, top: 4, bottom: 4 })
+
+      // 长按菜单遮罩 + 按钮
+      if (this.menuMsg !== null) {
+        Column()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('rgba(0,0,0,0.6)')
+          .justifyContent(FlexAlign.Center)
+          .onClick(() => { this.dismissMenu(); })
+
+        Column() {
+          Text('消息操作')
+            .fontSize(14)
+            .fontColor(Color.White)
+            .margin({ bottom: 12 })
+
+          Button('复制')
+            .fontSize(14)
+            .fontColor(Color.White)
+            .backgroundColor('#2a2a2a')
+            .width('80%')
+            .height(40)
+            .borderRadius(8)
+            .margin({ top: 6 })
+            .onClick(() => { this.copyMsgText(this.menuMsg!); })
+
+          Button('回复')
+            .fontSize(14)
+            .fontColor(Color.White)
+            .backgroundColor('#2a2a2a')
+            .width('80%')
+            .height(40)
+            .borderRadius(8)
+            .margin({ top: 6 })
+            .onClick(() => { this.replyMsg(this.menuMsg!); })
+
+          if (this.hasImageSeg(this.menuMsg!)) {
+            Button('保存图片')
+              .fontSize(14)
+              .fontColor(Color.White)
+              .backgroundColor('#2a2a2a')
+              .width('80%')
+              .height(40)
+              .borderRadius(8)
+              .margin({ top: 6 })
+              .onClick(() => { this.dismissMenu(); })
+          }
+
+          if (this.menuMsg!.isSelf) {
+            Button('撤回')
+              .fontSize(14)
+              .fontColor('#FF6666')
+              .backgroundColor('#2a2a2a')
+              .width('80%')
+              .height(40)
+              .borderRadius(8)
+              .margin({ top: 6 })
+              .onClick(() => { this.revokeMsg(this.menuMsg!); })
+          }
+
+          Button('取消')
+            .fontSize(13)
+            .fontColor('#AAAAAA')
+            .backgroundColor(Color.Transparent)
+            .margin({ top: 8 })
+            .onClick(() => { this.dismissMenu(); })
+        }
+        .width('78%')
+        .backgroundColor('#1a1a1a')
+        .borderRadius(16)
+        .padding(16)
+        .alignItems(HorizontalAlign.Center)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.Black)
+  }
+}

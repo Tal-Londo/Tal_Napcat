@@ -1,0 +1,156 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "NapcatWatch entry module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "QQ for HarmonyOS Watch"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "NapcatWatch"
+    },
+    {
+      "name": "network_permission_reason",
+      "value": "用于通过WebSocket连接Napcat服务器进行消息通信"
+    },
+    {
+      "name": "connection_title",
+      "value": "连接服务器"
+    },
+    {
+      "name": "url_placeholder",
+      "value": "wss://192.168.1.100:8099"
+    },
+    {
+      "name": "connect_button",
+      "value": "连接"
+    },
+    {
+      "name": "disconnect_button",
+      "value": "断开"
+    },
+    {
+      "name": "connected_status",
+      "value": "已连接"
+    },
+    {
+      "name": "disconnected_status",
+      "value": "未连接"
+    },
+    {
+      "name": "connecting_status",
+      "value": "连接中..."
+    },
+    {
+      "name": "history_servers",
+      "value": "历史服务器"
+    },
+    {
+      "name": "advanced_options",
+      "value": "高级选项"
+    },
+    {
+      "name": "auto_reconnect",
+      "value": "自动重连"
+    },
+    {
+      "name": "heartbeat_interval",
+      "value": "心跳间隔(s)"
+    },
+    {
+      "name": "saving",
+      "value": "保存中..."
+    },
+    {
+      "name": "splash_loading",
+      "value": "正在初始化..."
+    },
+    {
+      "name": "connect_failed",
+      "value": "连接失败"
+    },
+    {
+      "name": "connect_timeout",
+      "value": "连接超时"
+    },
+    {
+      "name": "empty_history",
+      "value": "暂无历史连接"
+    },
+    {
+      "name": "enter_url_hint",
+      "value": "请输入服务器地址"
+    },
+    {
+      "name": "click_connect_hint",
+      "value": "输入地址后点击连接"
+    },
+    {
+      "name": "home_messages",
+      "value": "消息"
+    },
+    {
+      "name": "no_messages",
+      "value": "暂无消息"
+    },
+    {
+      "name": "no_messages_hint",
+      "value": "收到新消息后将显示在这里"
+    },
+    {
+      "name": "contacts_title",
+      "value": "联系人"
+    },
+    {
+      "name": "tab_friends",
+      "value": "好友"
+    },
+    {
+      "name": "tab_groups",
+      "value": "群聊"
+    },
+    {
+      "name": "no_friends",
+      "value": "暂无好友"
+    },
+    {
+      "name": "no_groups",
+      "value": "暂无群聊"
+    },
+    {
+      "name": "load_from_server_hint",
+      "value": "连接服务器后自动加载"
+    },
+    {
+      "name": "quick_reply",
+      "value": "快捷回复"
+    },
+    {
+      "name": "input_hint",
+      "value": "输入消息"
+    },
+    {
+      "name": "online_status",
+      "value": "在线"
+    },
+    {
+      "name": "offline_status",
+      "value": "离线"
+    },
+    {
+      "name": "connecting_state",
+      "value": "连接中"
+    },
+    {
+      "name": "initializing",
+      "value": "正在初始化..."
+    },
+    {
+      "name": "connecting_server",
+      "value": "正在连接服务器..."
+    }
+  ]
+}

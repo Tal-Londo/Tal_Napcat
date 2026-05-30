@@ -1,0 +1,12 @@
+{
+  "src": [
+    "pages/SplashPage",
+    "pages/HomePage",
+    "pages/ChatDetailPage",
+    "pages/EditServerPage",
+    "pages/DebugPage",
+    "pages/MediaViewerPage",
+    "pages/SendMessagePage",
+    "pages/CrownDebugPage"
+  ]
+}

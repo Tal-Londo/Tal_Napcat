@@ -1,0 +1,13 @@
+{
+  "infos": {
+    "entry": {
+      "includes": [
+        "pages/SplashPage",
+        "pages/ConnectionPage"
+      ]
+    }
+  },
+  "allowsDomain": {
+    "allowAll": true
+  }
+}
