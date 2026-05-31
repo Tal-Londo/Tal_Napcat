@@ -206,6 +206,26 @@ struct MediaViewerPage {
               .objectFit(ImageFit.Contain)
               .height('70%')
               .width('90%')
+              .onStart(() => {
+                RefreshLogger.getInstance().log('VIDEO-ONSTART', 'playback started, url=' + this.getCurrent().url.substring(0, 80));
+              })
+              .onPause(() => {
+                RefreshLogger.getInstance().log('VIDEO-ONPAUSE', 'playback paused');
+              })
+              .onFinish(() => {
+                RefreshLogger.getInstance().log('VIDEO-ONFINISH', 'playback finished');
+              })
+              .onError(() => {
+                RefreshLogger.getInstance().log('VIDEO-ONERR', 'Video component error, url=' + this.getCurrent().url.substring(0, 80));
+              })
+              .onPrepared((event) => {
+                RefreshLogger.getInstance().log('VIDEO-ONPREPARED', 'duration=' + event?.duration + ' url=' + this.getCurrent().url.substring(0, 80));
+              })
+              .onUpdate((event) => {
+                if (event?.time !== undefined) {
+                  RefreshLogger.getInstance().log('VIDEO-TIME', 'time=' + event.time);
+                }
+              })
 
             // pan for swipe between items
             Row()
