@@ -447,6 +447,18 @@ export class ChatStore {
     }
   }
 
+  async deleteMessageByMsgId(messageId: number): Promise<void> {
+    if (this.rdbStore === null) {
+      return;
+    }
+    try {
+      let predicates = new relationalStore.RdbPredicates('messages');
+      predicates.equalTo('message_id', messageId);
+      await this.rdbStore.delete(predicates);
+    } catch (err) {
+    }
+  }
+
   async clearAllData(): Promise<void> {
     if (this.rdbStore === null) {
       return;

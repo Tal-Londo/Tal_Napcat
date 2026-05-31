@@ -1,6 +1,6 @@
 import { router, ArcButton, ArcButtonOptions, ArcButtonStyleMode, ArcButtonPosition, LengthUnit, ColorMetrics, LengthMetrics } from '@kit.ArkUI';
 import { WebSocketManager } from '../model/WebSocketManager';
-import { ChatStore, GroupMember } from '../model/ChatStore';
+import { ChatStore, CachedMessage, GroupMember } from '../model/ChatStore';
 import { ConfigManager } from '../model/ConfigManager';
 import { FaceStore } from '../model/FaceStore';
 import { RefreshLogger } from '../model/RefreshLogger';
@@ -271,7 +271,7 @@ struct SendMessagePage {
     return arr;
   }
 
-  sendAndClose(): void {
+  async sendAndClose(): Promise<void> {
     let arr = this.buildMsgArr();
     if (arr.length === 0) {
       return;
@@ -294,9 +294,53 @@ struct SendMessagePage {
     };
 
     this.wsManager.sendRequest(reqObj);
+
+    // 保存本地占位消息，Napcat 不回显自己的消息
+    await this.savePlaceholder(arr);
+
     // 标记已发送，aboutToDisappear 保存时会写空草稿
     this.sent = true;
     router.back();
+  }
+
+  async savePlaceholder(segments: Record<string, Object>[]): Promise<void> {
+    let chatId = ChatStore.chatId(this.chatType, this.peerId);
+    let rawText = '';
+    let firstType = 'text';
+    for (let seg of segments) {
+      let s = seg as Record<string, Object>;
+      let st = s['type'] as string || '';
+      if (rawText === '' && st !== '') {
+        firstType = st;
+      }
+      let sd = s['data'] as Record<string, Object> || {};
+      if (st === 'text') {
+        rawText += (sd['text'] as string || '');
+      } else if (st === 'face') {
+        rawText += '[表情]';
+      } else if (st === 'at') {
+        rawText += '@' + (sd['qq'] || '');
+      } else if (st === 'reply') {
+        rawText += '[回复]';
+      } else if (st === 'record') {
+        rawText += '[语音]';
+      }
+    }
+
+    let ctx = this.getUIContext().getHostContext() as Context;
+    let cm = new CachedMessage();
+    cm.messageId = -Date.now(); // 唯一负 ID，后续 handleHistoryResponse 替换
+    cm.chatId = chatId;
+    cm.userId = 0; // selfId 在 SendMessagePage 拿不到，填 0 后 loadHistory 补 isSelf
+    cm.nickname = '';
+    cm.content = JSON.stringify(segments);
+    cm.rawMessage = rawText;
+    cm.msgType = firstType;
+    cm.timestamp = Date.now();
+    cm.isSelf = true;
+
+    await ChatStore.getInstance().initDb(ctx);
+    await ChatStore.getInstance().saveMessage(cm);
   }
 
   async toggleRecording(): Promise<void> {
@@ -349,10 +393,16 @@ struct SendMessagePage {
     }
   }
 
-  sendVoice(): void {
+  async sendVoice(): Promise<void> {
     let req = OneBotRequest.createSendVoice(
       this.peerId, this.chatType, this.recordedFilePath);
     this.wsManager.sendRequest(req);
+
+    // 保存本地占位消息
+    let voiceData: Record<string, Object> = { 'file': this.recordedFilePath };
+    let voiceSeg: Record<string, Object> = { 'type': 'record', 'data': voiceData };
+    await this.savePlaceholder([voiceSeg]);
+
     this.sent = true;
     router.back();
   }

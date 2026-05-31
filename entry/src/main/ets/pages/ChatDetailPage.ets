@@ -62,6 +62,11 @@ struct ChatDetailPage {
     this.msgCenter.unregisterChatHandler(this.chatId);
   }
 
+  onPageShow(): void {
+    // 从 SendMessagePage 返回时重新加载 DB，拾取刚发的新占位消息
+    this.loadHistorySilent();
+  }
+
   async initPage(): Promise<void> {
     let context: Context = this.getUIContext().getHostContext() as Context;
     await this.chatStore.initDb(context);
@@ -89,25 +94,32 @@ struct ChatDetailPage {
 
   async loadHistory(): Promise<void> {
     let cached: CachedMessage[] = await this.chatStore.getMessages(this.chatId, 100);
-    let map: Record<number, CachedMessage> = {};
-    let order: number[] = [];
+    // 占位消息用 index 追踪，真实消息用 messageId 去重
+    let deduped: CachedMessage[] = [];
+    let seenIds: Set<number> = new Set();
     for (let cm of cached) {
-      if (cm.messageId <= 0) { continue; }
       cm.isSelf = cm.userId === this.selfId;
-      let existing = map[cm.messageId];
-      if (existing !== undefined) {
-        if (!existing.isRevoked() && cm.isRevoked()) {
-          map[cm.messageId] = cm;
+      if (cm.messageId > 0) {
+        if (seenIds.has(cm.messageId)) {
+          // 已存在的，被撤回的优先
+          for (let i = 0; i < deduped.length; i++) {
+            if (deduped[i].messageId === cm.messageId) {
+              if (!deduped[i].isRevoked() && cm.isRevoked()) {
+                deduped[i] = cm;
+              }
+              break;
+            }
+          }
+        } else {
+          seenIds.add(cm.messageId);
+          deduped.push(cm);
         }
       } else {
-        map[cm.messageId] = cm;
-        order.push(cm.messageId);
+        // 占位消息直接追加
+        deduped.push(cm);
       }
     }
-    let deduped: CachedMessage[] = [];
-    for (let id of order) {
-      deduped.push(map[id]);
-    }
+    deduped.sort((a, b) => a.timestamp - b.timestamp);
     this.messages = deduped;
     this.messagesDataSource.setMessages(deduped);
     this.messagesDataSource.notifyDataReload();
@@ -305,12 +317,17 @@ struct ChatDetailPage {
 
         // 自己发送的消息：检查是否有本地占位消息需要替换
         if (senderId === this.selfId) {
+          let cmType = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime).msgType;
           let replaceIdx = -1;
           for (let i = 0; i < newMessages.length; i++) {
             let m = newMessages[i];
             if (m.messageId < 0 && m.isSelf &&
-              m.rawMessage === rawMsg &&
+              m.msgType === cmType &&
               Math.abs(m.timestamp - msgTime) < 60000) {
+              // 文本消息额外校验内容一致性
+              if (cmType === 'text' && m.rawMessage !== rawMsg) {
+                continue;
+              }
               replaceIdx = i;
               break;
             }
@@ -318,6 +335,8 @@ struct ChatDetailPage {
           if (replaceIdx >= 0) {
             // 用真实消息替换占位消息
             let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
+            // 删除旧占位消息（负 messageId）
+            await this.chatStore.deleteMessageByMsgId(newMessages[replaceIdx].messageId);
             newMessages[replaceIdx] = cm;
             await this.chatStore.saveMessage(cm);
             if (msgId > 0) {
@@ -474,27 +493,29 @@ struct ChatDetailPage {
 
   async loadHistorySilent(): Promise<void> {
     let cached: CachedMessage[] = await this.chatStore.getMessages(this.chatId, 100);
-    // 按 message_id 聚合，被撤回的消息优先保留
-    let map: Record<number, CachedMessage> = {};
-    let order: number[] = [];
+    let deduped: CachedMessage[] = [];
+    let seenIds: Set<number> = new Set();
     for (let cm of cached) {
-      if (cm.messageId <= 0) { continue; }
       cm.isSelf = cm.userId === this.selfId;
-      let existing = map[cm.messageId];
-      if (existing !== undefined) {
-        // 撤回的行优先
-        if (!existing.isRevoked() && cm.isRevoked()) {
-          map[cm.messageId] = cm;
+      if (cm.messageId > 0) {
+        if (seenIds.has(cm.messageId)) {
+          for (let i = 0; i < deduped.length; i++) {
+            if (deduped[i].messageId === cm.messageId) {
+              if (!deduped[i].isRevoked() && cm.isRevoked()) {
+                deduped[i] = cm;
+              }
+              break;
+            }
+          }
+        } else {
+          seenIds.add(cm.messageId);
+          deduped.push(cm);
         }
       } else {
-        map[cm.messageId] = cm;
-        order.push(cm.messageId);
+        deduped.push(cm);
       }
     }
-    let deduped: CachedMessage[] = [];
-    for (let id of order) {
-      deduped.push(map[id]);
-    }
+    deduped.sort((a, b) => a.timestamp - b.timestamp);
     this.messages = deduped;
     this.messagesDataSource.setMessages(deduped);
     this.messagesDataSource.notifyDataReload();
