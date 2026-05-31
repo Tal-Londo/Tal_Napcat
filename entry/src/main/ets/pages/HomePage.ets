@@ -51,7 +51,7 @@ struct HomePage {
       MessageTab({ stateColor: this.getStateColor(), refreshTrigger: this.refreshTrigger })
       FriendsTab({ stateColor: this.getStateColor(), refreshTrigger: this.refreshTrigger })
       GroupsTab({ stateColor: this.getStateColor(), refreshTrigger: this.refreshTrigger })
-      SettingsTab({ stateColor: this.getStateColor() })
+      SettingsTab({ stateColor: this.getStateColor(), refreshTrigger: this.refreshTrigger })
     }
     .indicator(
       new ArcDotIndicator()

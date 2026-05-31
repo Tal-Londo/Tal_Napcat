@@ -59,11 +59,7 @@ export class WsLogEntry {
 }
 
 const CONNECT_TIMEOUT_MS = 10000;
-const PING_INTERVAL_MS = 30000;
-const PONG_TIMEOUT_MS = 10000;
-const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_BASE_DELAY_MS = 2000;
-const RECONNECT_MAX_DELAY_MS = 30000;
+const RECONNECT_DELAY_MS = 5000;
 
 export class WebSocketManager {
   private static instance: WebSocketManager;
@@ -411,26 +407,16 @@ export class WebSocketManager {
     if (this.intentionalClose || !this.reconnectEnabled) {
       return;
     }
-    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      hilog.warn(DOMAIN, TAG, 'Max reconnect attempts reached');
-      this.addLog(WsEventType.SYSTEM, '已达最大重连次数，停止重连');
-      this.fireError('已达最大重连次数，已停止重连');
-      return;
-    }
     this.reconnectAttempts++;
-    let delay = Math.min(
-      RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1),
-      RECONNECT_MAX_DELAY_MS
-    );
     hilog.info(DOMAIN, TAG,
-      `Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+      `Reconnecting in ${RECONNECT_DELAY_MS}ms (attempt ${this.reconnectAttempts})`);
     this.addLog(WsEventType.SYSTEM,
-      `重连 ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}，${delay}ms 后重试`);
+      `重连 第${this.reconnectAttempts}次，${RECONNECT_DELAY_MS / 1000}s 后重试`);
     setTimeout(() => {
       if (this.state === WsState.DISCONNECTED && !this.intentionalClose) {
         this.connect(this.currentUrl);
       }
-    }, delay);
+    }, RECONNECT_DELAY_MS);
   }
 
   // Napcat 服务端主动推送 heartbeat meta_event，客户端无需发送 ping

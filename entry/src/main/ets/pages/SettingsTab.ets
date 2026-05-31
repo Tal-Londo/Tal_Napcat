@@ -16,6 +16,7 @@ export struct SettingsTab {
   private chatStore: ChatStore = ChatStore.getInstance();
   private wsManager: WebSocketManager = WebSocketManager.getInstance();
   @Prop stateColor: string = '#FF6666';
+  @Prop refreshTrigger: number = 0;
   @State wsState: WsState = WsState.DISCONNECTED;
   @State statusText: string = '未连接';
   @State autoReconnect: boolean = true;
@@ -23,6 +24,7 @@ export struct SettingsTab {
   @State currentUrl: string = '';
   @State currentName: string = '';
   listScroller: Scroller = new Scroller();
+  private stateListenerId?: (state: WsState) => void;
 
   aboutToAppear(): void {
     this.initPage();
@@ -37,29 +39,31 @@ export struct SettingsTab {
     this.autoReconnect = await this.configManager.getBoolean('auto_reconnect', true);
     await this.loadServers();
 
-    this.wsState = this.wsManager.getState();
-    if (this.wsState === WsState.CONNECTED) {
-      this.statusText = '已连接';
-    }
+    this.refreshDisplay();
 
-    this.wsManager.onStateChange = (state: WsState) => {
-      this.wsState = state;
-      switch (state) {
-        case WsState.CONNECTED:
-          this.statusText = '已连接';
-          break;
-        case WsState.CONNECTING:
-          this.statusText = '连接中...';
-          break;
-        case WsState.DISCONNECTED:
-          this.statusText = '未连接';
-          break;
-      }
+    this.stateListenerId = (state: WsState) => {
+      this.refreshDisplay();
     };
+    this.wsManager.addStateListener(this.stateListenerId);
 
     this.wsManager.onError = (error: string) => {
       this.statusText = error;
     };
+  }
+
+  refreshDisplay(): void {
+    this.wsState = this.wsManager.getState();
+    switch (this.wsState) {
+      case WsState.CONNECTED:
+        this.statusText = '已连接';
+        break;
+      case WsState.CONNECTING:
+        this.statusText = '连接中...';
+        break;
+      default:
+        this.statusText = '未连接';
+        break;
+    }
   }
 
   async loadServers(): Promise<void> {
@@ -144,24 +148,23 @@ export struct SettingsTab {
   @Builder
   endSwipe(server: OneBotServerInfo) {
     Column() {
-      Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.square_and_pencil'))
-          .fontColor(['#C0B8E0'])
-          .fontSize(16)
-      }
-      .width(36)
-      .height(36)
-      .onClick(() => { router.pushUrl({ url: 'pages/EditServerPage', params: { 'url': server.url } }); })
+      Button('编辑')
+        .fontSize(12)
+        .fontColor('#C0B8E0')
+        .backgroundColor(Color.Transparent)
+        .width(40)
+        .height(36)
+        .borderRadius(8)
+        .onClick(() => { router.pushUrl({ url: 'pages/EditServerPage', params: { 'url': server.url } }); })
 
-      Button({ type: ButtonType.Circle }) {
-        SymbolGlyph($r('sys.symbol.trash'))
-          .fontColor(['#FF6666'])
-          .fontSize(16)
-      }
-      .width(36)
-      .height(36)
-      .margin({ top: 4 })
-      .onClick(() => { this.deleteServer(server); })
+      Button('删除')
+        .fontSize(12)
+        .fontColor('#FF6666')
+        .backgroundColor(Color.Transparent)
+        .width(40)
+        .height(36)
+        .borderRadius(8)
+        .onClick(() => { this.deleteServer(server); })
     }
     .padding(6)
     .justifyContent(FlexAlign.Center)
@@ -351,55 +354,37 @@ export struct SettingsTab {
 
         // Debug 入口
         ArcListItem() {
-          Column() {
-            SymbolGlyph($r('sys.symbol.wrench_and_screwdriver'))
-              .fontColor(['#C0B8E0'])
-              .fontSize(20)
-              .margin({ bottom: 4 })
-            Text('Debug 调试面板')
-              .fontSize(14)
-              .fontColor('#C0B8E0')
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Center)
-          .padding({ top: 14, bottom: 14 })
-          .onClick(() => { router.pushUrl({ url: 'pages/DebugPage' }); })
+          Text('Debug 调试面板')
+            .fontSize(14)
+            .fontColor('#C0B8E0')
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 14 })
+            .onClick(() => { router.pushUrl({ url: 'pages/DebugPage' }); })
         }
         .width('82%')
 
         // 刷新日志入口
         ArcListItem() {
-          Column() {
-            SymbolGlyph($r('sys.symbol.doc_text'))
-              .fontColor(['#00FF88'])
-              .fontSize(20)
-              .margin({ bottom: 4 })
-            Text('消息刷新日志')
-              .fontSize(14)
-              .fontColor('#00FF88')
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Center)
-          .padding({ top: 14, bottom: 14 })
-          .onClick(() => { router.pushUrl({ url: 'pages/RefreshLogPage' }); })
+          Text('消息刷新日志')
+            .fontSize(14)
+            .fontColor('#00FF88')
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 14 })
+            .onClick(() => { router.pushUrl({ url: 'pages/RefreshLogPage' }); })
         }
         .width('82%')
 
         // Crown 调试入口
         ArcListItem() {
-          Column() {
-            SymbolGlyph($r('sys.symbol.circle'))
-              .fontColor(['#FFB347'])
-              .fontSize(20)
-              .margin({ bottom: 4 })
-            Text('表冠旋转调试')
-              .fontSize(14)
-              .fontColor('#FFB347')
-          }
-          .width('100%')
-          .alignItems(HorizontalAlign.Center)
-          .padding({ top: 14, bottom: 14 })
-          .onClick(() => { router.pushUrl({ url: 'pages/CrownDebugPage' }); })
+          Text('表冠旋转调试')
+            .fontSize(14)
+            .fontColor('#FFB347')
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 14 })
+            .onClick(() => { router.pushUrl({ url: 'pages/CrownDebugPage' }); })
         }
         .width('82%')
       }
