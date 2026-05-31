@@ -37,6 +37,7 @@ struct ChatDetailPage {
   @State title: string = '';
   @State loading: boolean = true;
   @State menuMsg: CachedMessage | null = null;
+  @State swipedMsgId: number = 0;
   private myRole: string = '';
   private myTitle: string = '';
   private shutUpUntil: number = 0;
@@ -805,10 +806,13 @@ struct ChatDetailPage {
                 allMediaUrls: this.getAllMediaUrls(),
                 allMessages: this.messages,
                 groupPeerId: (this.chatType === 'group' ? this.peerId : 0),
-                onLongPress: (m: CachedMessage) => { this.showMenu(m); }
+                onLongPress: (m: CachedMessage) => { this.showMenu(m); },
+                onSwipeReply: (m: CachedMessage) => { this.swipedMsgId = (this.swipedMsgId === m.messageId ? 0 : m.messageId); },
+                onReplyTap: (m: CachedMessage) => { this.replyMsg(m); this.swipedMsgId = 0; },
+                showReplyBtn: (this.swipedMsgId === msg.messageId)
               })
             }
-            .width('84%')
+            .width('89%')
             .autoScale(false)
           }, (m: CachedMessage) => ChatMessagesDataSource.messageItemKey(m))
         }
