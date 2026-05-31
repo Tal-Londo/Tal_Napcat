@@ -6,13 +6,12 @@ function isGroupChat(msg: OneBotMessage): boolean {
 }
 
 function getDisplayText(msg: OneBotMessage): string {
+  let raw = '';
   if (msg.raw_message !== undefined && msg.raw_message !== '') {
-    return msg.raw_message as string;
-  }
-  if (typeof msg.message === 'string') {
-    return msg.message as string;
-  }
-  if (msg.message instanceof Array) {
+    raw = msg.raw_message as string;
+  } else if (typeof msg.message === 'string') {
+    raw = msg.message as string;
+  } else if (msg.message instanceof Array) {
     let arr = msg.message as Object[];
     let parts: string[] = [];
     for (let seg of arr) {
@@ -30,7 +29,30 @@ function getDisplayText(msg: OneBotMessage): string {
     }
     return parts.join('');
   }
-  return '';
+  return stripCQCode(raw);
+}
+
+/** CQ码 → 文字描述，用于消息预览/回复引用等场景 */
+export function stripCQCode(raw: string): string {
+  if (raw === '') {
+    return '';
+  }
+  // 按序替换常见 CQ 码
+  let result = raw;
+  result = result.replace(/\[CQ:image,[^\]]*\]/gi, '[图片]');
+  result = result.replace(/\[CQ:record,[^\]]*\]/gi, '[语音]');
+  result = result.replace(/\[CQ:video,[^\]]*\]/gi, '[视频]');
+  result = result.replace(/\[CQ:face,[^\]]*\]/gi, '[表情]');
+  result = result.replace(/\[CQ:at,[^\]]*\]/gi, (_match: string) => {
+    let qqMatch = _match.match(/qq=(\d+)/i);
+    return qqMatch ? '@' + qqMatch[1] : '@提及';
+  });
+  result = result.replace(/\[CQ:file,[^\]]*\]/gi, '[文件]');
+  result = result.replace(/\[CQ:reply,[^\]]*\]/gi, '[回复]');
+  result = result.replace(/\[CQ:share,[^\]]*\]/gi, '[分享]');
+  result = result.replace(/\[CQ:music,[^\]]*\]/gi, '[音乐]');
+  result = result.replace(/\[CQ:\w+,[^\]]*\]/gi, '[消息]');
+  return result;
 }
 
 function getSenderName(msg: OneBotMessage): string {

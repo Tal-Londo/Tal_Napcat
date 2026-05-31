@@ -2,6 +2,7 @@ import { CachedMessage, ChatStore, GroupMember } from '../model/ChatStore';
 import { CacheManager, CacheType } from '../model/CacheManager';
 import { FaceStore } from '../model/FaceStore';
 import { OneBotRequest } from '../model/OneBotModel';
+import { stripCQCode } from '../model/MessageFormatter';
 import { WebSocketManager } from '../model/WebSocketManager';
 import { router } from '@kit.ArkUI';
 import { media } from '@kit.MediaKit';
@@ -116,7 +117,7 @@ export struct MsgBubble {
     }
     for (let m of this.allMessages) {
       if (m.messageId === idNum) {
-        return m.nickname + ': ' + (m.rawMessage || '[消息]');
+        return m.nickname + ': ' + stripCQCode(m.rawMessage || '[消息]');
       }
     }
     return '';

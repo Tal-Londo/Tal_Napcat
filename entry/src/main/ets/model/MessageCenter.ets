@@ -1,6 +1,6 @@
 import { WebSocketManager } from './WebSocketManager';
 import { ChatStore, ChatItem, CachedMessage, ContactItem, GroupItem } from './ChatStore';
-import { MessageFormatter } from './MessageFormatter';
+import { MessageFormatter, stripCQCode } from './MessageFormatter';
 import { OneBotMessage, OneBotRequest, WsState } from './OneBotModel';
 import { ConfigManager } from './ConfigManager';
 import { RefreshLogger } from './RefreshLogger';
@@ -195,7 +195,7 @@ export class MessageCenter {
       let rawMsg = String(last['raw_message'] || '');
       let msgTime = parseInt(String(last['time'] || '0')) * 1000;
 
-      let preview = rawMsg;
+      let preview = stripCQCode(rawMsg);
       if (preview.length > 30) {
         preview = preview.substring(0, 30) + '...';
       }
