@@ -346,7 +346,7 @@ struct MediaViewerPage {
     .onDigitalCrown((e: CrownEvent) => {
       if (this.getCurrent().type === 'image') {
         let delta = Math.floor(e.degree * 100) / 100;
-        let newScale = Math.max(0.5, Math.min(this.imgScale - delta * 0.5, 5.0));
+        let newScale = Math.max(0.5, Math.min(this.imgScale - delta * 0.1, 5.0));
         if (Math.abs(newScale - 1.0) < 0.03) {
           newScale = 1.0;
           this.offsetX = 0;
