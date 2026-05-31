@@ -72,8 +72,14 @@ struct ChatDetailPage {
       MessageFormatter.setSelfId(this.selfId);
     }
 
+    RefreshLogger.getInstance().log('CDP-INIT', 'registering handler for chatId=' + this.chatId);
     this.msgCenter.registerChatHandler(this.chatId, (msg: OneBotMessage) => {
-      this.handleWsEvent(msg);
+      RefreshLogger.getInstance().log('CDP-CALLBACK', 'arrow fn entered pt=' + msg.post_type);
+      try {
+        this.handleWsEvent(msg);
+      } catch (e) {
+        RefreshLogger.getInstance().log('CDP-ERR', 'handleWsEvent threw: ' + (e as Error).message);
+      }
     });
 
     await this.loadHistory();

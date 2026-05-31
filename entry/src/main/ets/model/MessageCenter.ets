@@ -61,10 +61,12 @@ export class MessageCenter {
 
   registerChatHandler(chatId: string, handler: MessageHandler): void {
     this.chatHandlers.set(chatId, handler);
+    RefreshLogger.getInstance().log('MC-REG', 'chatId=' + chatId + ' totalH=' + this.chatHandlers.size);
   }
 
   unregisterChatHandler(chatId: string): void {
     this.chatHandlers.delete(chatId);
+    RefreshLogger.getInstance().log('MC-UNREG', 'chatId=' + chatId + ' totalH=' + this.chatHandlers.size);
   }
 
   addGlobalHandler(handler: MessageHandler): void {
