@@ -553,7 +553,7 @@ export struct MsgBubble {
                     this.onLongPress(this.msg);
                   }
                 }),
-              PanGesture({ direction: PanDirection.Horizontal, distance: 30 })
+              PanGesture({ direction: PanDirection.Left, distance: 30 })
                 .onActionEnd((event: GestureEvent) => {
                   if (event.offsetX < -20 && this.onSwipeReply) {
                     this.onSwipeReply(this.msg);
