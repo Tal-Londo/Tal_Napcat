@@ -8,6 +8,7 @@ import { ConfigManager } from '../model/ConfigManager';
 import { MsgBubble } from '../components/MsgBubble';
 import { FaceStore } from '../model/FaceStore';
 import { RefreshLogger } from '../model/RefreshLogger';
+import { ChatMessagesDataSource } from './model/ChatMessagesDataSource';
 
 
 class RouteParams {
@@ -25,6 +26,7 @@ struct ChatDetailPage {
   private msgCenter: MessageCenter = MessageCenter.getInstance();
   private selfId: number = 0;
   @State messages: CachedMessage[] = [];
+  messagesDataSource: ChatMessagesDataSource = new ChatMessagesDataSource([]);
   scrollScroller: Scroller = new Scroller();
 
   @State peerName: string = '';
@@ -107,7 +109,9 @@ struct ChatDetailPage {
       deduped.push(map[id]);
     }
     this.messages = deduped;
-this.loading = false;
+    this.messagesDataSource.setMessages(deduped);
+    this.messagesDataSource.notifyDataReload();
+    this.loading = false;
     this.scrollToBottom();
     this.requestArcListFocus();
 
@@ -256,6 +260,8 @@ this.loading = false;
       }
       if (updated) {
         this.messages = msgs;
+        this.messagesDataSource.setMessages(msgs);
+        this.messagesDataSource.notifyDataReload();
       }
     } catch (_e) {
     }
@@ -334,6 +340,8 @@ this.loading = false;
       if (newCount > 0) {
         newMessages.sort((a: CachedMessage, b: CachedMessage) => a.timestamp - b.timestamp);
         this.messages = newMessages;
+        this.messagesDataSource.setMessages(newMessages);
+        this.messagesDataSource.notifyDataReload();
         this.scrollToBottom();
       }
       this.inferMyRole();
@@ -433,6 +441,8 @@ this.loading = false;
     }
     let updated = [...this.messages, cm];
     this.messages = updated;
+    this.messagesDataSource.setMessages(updated);
+    this.messagesDataSource.notifyDataReload();
     RefreshLogger.getInstance().log('CDP-OK', 'msgId=' + cm.messageId + ' n=' + updated.length);
     this.scrollToBottom();
   }
@@ -458,6 +468,8 @@ this.loading = false;
       return;
     }
     this.messages = updated;
+    this.messagesDataSource.setMessages(updated);
+    this.messagesDataSource.notifyDataReload();
   }
 
   async loadHistorySilent(): Promise<void> {
@@ -484,6 +496,8 @@ this.loading = false;
       deduped.push(map[id]);
     }
     this.messages = deduped;
+    this.messagesDataSource.setMessages(deduped);
+    this.messagesDataSource.notifyDataReload();
   }
 
   requestArcListFocus(): void {
@@ -526,6 +540,8 @@ this.loading = false;
     this.chatStore.saveMessage(localMsg);
     let updated = [...this.messages, localMsg];
     this.messages = updated;
+    this.messagesDataSource.setMessages(updated);
+    this.messagesDataSource.notifyDataReload();
     this.scrollToBottom();
 
     let chatItem: ChatItem = new ChatItem();
@@ -780,7 +796,7 @@ this.loading = false;
             .width('82%')
           }
 
-          ForEach(this.messages, (msg: CachedMessage, index: number) => {
+          LazyForEach(this.messagesDataSource, (msg: CachedMessage, index: number) => {
             ArcListItem() {
               MsgBubble({
                 msg: msg,
@@ -794,7 +810,7 @@ this.loading = false;
             }
             .width('84%')
             .autoScale(false)
-          }, (msg: CachedMessage) => msg.messageId + '-' + msg.msgType + '-' + msg.timestamp)
+          }, (m: CachedMessage) => ChatMessagesDataSource.messageItemKey(m))
         }
         .width('100%')
         .height('100%')
