@@ -266,13 +266,17 @@ export struct MsgBubble {
       this.stopVoice();
       return;
     }
-    // 优先用已有的 URL（data.url 或已下载的）
+    if (this.voiceDownloaded !== '') {
+      this.startVoicePlay(this.voiceDownloaded);
+      return;
+    }
+    // 优先直接 HTTP URL
     if (seg.url !== '' && seg.url.startsWith('http')) {
       this.startVoicePlay(seg.url);
       return;
     }
-    if (this.voiceDownloaded !== '') {
-      this.startVoicePlay(this.voiceDownloaded);
+    if (seg.recordFile !== '' && seg.recordFile.startsWith('http')) {
+      this.startVoicePlay(seg.recordFile);
       return;
     }
     if (seg.recordFile === '') {
@@ -284,10 +288,14 @@ export struct MsgBubble {
     wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
       let url = data['url'] as string || '';
       let outFile = data['file'] as string || '';
-      if (url !== '') {
+      if (url !== '' && url.startsWith('http')) {
         this.voiceDownloaded = url;
         this.startVoicePlay(url);
+      } else if (outFile !== '' && outFile.startsWith('http')) {
+        this.voiceDownloaded = outFile;
+        this.startVoicePlay(outFile);
       } else if (outFile !== '') {
+        // 服务端本地路径，尝试用 file:// 协议播放
         this.voiceDownloaded = outFile;
         this.startVoicePlay(outFile);
       }
