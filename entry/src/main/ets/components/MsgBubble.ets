@@ -283,7 +283,7 @@ export struct MsgBubble {
       return;
     }
     this.voiceLoading = true;
-    RefreshLogger.getInstance().log('VOICE-GETREC', 'req file=' + file.substring(0, 60));
+    RefreshLogger.getInstance().log('VOICE-GETREC', 'req file=' + file);
     let wsm = WebSocketManager.getInstance();
     let req = OneBotRequest.createGetRecord(file, 'mp3');
     wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
@@ -308,7 +308,7 @@ export struct MsgBubble {
       let file = fileIo.openSync(filePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY);
       fileIo.writeSync(file.fd, buf.buffer);
       fileIo.closeSync(file);
-      RefreshLogger.getInstance().log('VOICE-SAVED', 'size=' + buf.length + ' path=' + filePath.substring(0, 60));
+      RefreshLogger.getInstance().log('VOICE-SAVED', 'size=' + buf.length + ' path=' + filePath);
       // 重新打开以获取可传给 AVPlayer 的 fd
       let fd = fileIo.openSync(filePath, fileIo.OpenMode.READ_ONLY);
       let fdNum = fd.fd;
@@ -369,7 +369,7 @@ export struct MsgBubble {
   }
 
   startVoicePlay(pathOrUrl: string): void {
-    RefreshLogger.getInstance().log('VOICE-PLAY', 'start url=' + pathOrUrl.substring(0, 100));
+    RefreshLogger.getInstance().log('VOICE-PLAY', 'start url=' + pathOrUrl);
     try {
       if (this.avPlayer !== null) {
         this.avPlayer.release();

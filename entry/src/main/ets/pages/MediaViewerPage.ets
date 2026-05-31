@@ -207,7 +207,7 @@ struct MediaViewerPage {
               .height('70%')
               .width('90%')
               .onStart(() => {
-                RefreshLogger.getInstance().log('VIDEO-ONSTART', 'playback started, url=' + this.getCurrent().url.substring(0, 80));
+                RefreshLogger.getInstance().log('VIDEO-ONSTART', 'playback started, url=' + this.getCurrent().url);
               })
               .onPause(() => {
                 RefreshLogger.getInstance().log('VIDEO-ONPAUSE', 'playback paused');
@@ -216,10 +216,10 @@ struct MediaViewerPage {
                 RefreshLogger.getInstance().log('VIDEO-ONFINISH', 'playback finished');
               })
               .onError((event) => {
-                RefreshLogger.getInstance().log('VIDEO-ONERR', 'code=' + (event?.code ?? '?') + ' msg=' + (event?.message ?? '?') + ' url=' + this.getCurrent().url.substring(0, 60));
+                RefreshLogger.getInstance().log('VIDEO-ONERR', 'code=' + (event?.code ?? '?') + ' msg=' + (event?.message ?? '?') + ' url=' + this.getCurrent().url);
               })
               .onPrepared((event) => {
-                RefreshLogger.getInstance().log('VIDEO-ONPREPARED', 'duration=' + event?.duration + ' url=' + this.getCurrent().url.substring(0, 80));
+                RefreshLogger.getInstance().log('VIDEO-ONPREPARED', 'duration=' + event?.duration + ' url=' + this.getCurrent().url);
               })
               .onUpdate((event) => {
                 if (event?.time !== undefined) {

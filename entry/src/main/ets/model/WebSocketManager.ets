@@ -385,7 +385,7 @@ export class WebSocketManager {
         let msg = raw as OneBotMessage;
         RefreshLogger.getInstance().log('WS-DISPATCH',
           'pt=' + msg.post_type + ' mt=' + msg.message_type +
-          ' uid=' + msg.user_id + ' text=' + (msg.raw_message||'').substring(0,20));
+          ' uid=' + msg.user_id + ' text=' + (msg.raw_message||''));
         if (this.onMessage) {
           this.onMessage(msg);
         }
