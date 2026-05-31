@@ -186,8 +186,19 @@ struct MediaViewerPage {
     }
     media.createAVPlayer().then((player: media.AVPlayer) => {
       this.avPlayer = player;
+      let prepared = false;
       player.on('stateChange', (state: string) => {
         RefreshLogger.getInstance().log('VIDEO-STATE', 'state=' + state);
+        if (state === 'initialized' && !prepared) {
+          prepared = true;
+          player.prepare().then(() => {
+            RefreshLogger.getInstance().log('VIDEO-PREPARED', 'prepare OK, playing');
+            player.play();
+          }).catch((err: Error) => {
+            RefreshLogger.getInstance().log('VIDEO-PREP-ERR', 'prepare failed: ' + (err.message || 'unknown'));
+            this.videoLoading = false;
+          });
+        }
         if (state === 'playing') {
           this.videoLoading = false;
           this.videoPlaying = true;
@@ -202,13 +213,6 @@ struct MediaViewerPage {
         this.videoPlaying = false;
       });
       player.url = playUrl.startsWith('http') ? playUrl : ('file://' + playUrl);
-      player.prepare().then(() => {
-        RefreshLogger.getInstance().log('VIDEO-PREPARED', 'prepared OK, starting play');
-        player.play();
-      }).catch((err: Error) => {
-        RefreshLogger.getInstance().log('VIDEO-PREP-ERR', 'prepare failed: ' + (err.message || 'unknown'));
-        this.videoLoading = false;
-      });
     }).catch((err: Error) => {
       RefreshLogger.getInstance().log('VIDEO-CREATE-ERR', 'createAVPlayer failed: ' + (err.message || 'unknown'));
       this.videoLoading = false;

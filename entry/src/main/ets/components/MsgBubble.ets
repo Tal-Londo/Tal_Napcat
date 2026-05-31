@@ -318,8 +318,21 @@ export struct MsgBubble {
       }
       media.createAVPlayer().then((player: media.AVPlayer) => {
         this.avPlayer = player;
+        let prepared = false;
         player.on('stateChange', (state: string) => {
           RefreshLogger.getInstance().log('VOICE-STATE', 'state=' + state);
+          // url 设置后异步进入 initialized，此时才能 prepare
+          if (state === 'initialized' && !prepared) {
+            prepared = true;
+            player.prepare().then(() => {
+              RefreshLogger.getInstance().log('VOICE-PREPARED', 'prepare OK, playing');
+              player.play();
+              this.voicePlaying = true;
+            }).catch((err: Error) => {
+              RefreshLogger.getInstance().log('VOICE-PREP-ERR', 'prepare failed: ' + (err.message || 'unknown'));
+              this.voicePlaying = false;
+            });
+          }
           if (state === 'stopped' || state === 'completed') {
             this.voicePlaying = false;
           }
@@ -328,19 +341,7 @@ export struct MsgBubble {
           RefreshLogger.getInstance().log('VOICE-ERR', 'AVPlayer error callback');
           this.voicePlaying = false;
         });
-        if (pathOrUrl.startsWith('http')) {
-          player.url = pathOrUrl;
-        } else {
-          player.url = 'file://' + pathOrUrl;
-        }
-        player.prepare().then(() => {
-          RefreshLogger.getInstance().log('VOICE-PREPARED', 'prepared OK, starting play');
-          player.play();
-          this.voicePlaying = true;
-        }).catch((err: Error) => {
-          RefreshLogger.getInstance().log('VOICE-PREP-ERR', 'prepare failed: ' + (err.message || 'unknown'));
-          this.voicePlaying = false;
-        });
+        player.url = pathOrUrl.startsWith('http') ? pathOrUrl : ('file://' + pathOrUrl);
       }).catch((err: Error) => {
         RefreshLogger.getInstance().log('VOICE-CREATE-ERR', 'createAVPlayer failed: ' + (err.message || 'unknown'));
         this.voicePlaying = false;
