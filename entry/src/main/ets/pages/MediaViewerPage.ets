@@ -1,6 +1,8 @@
 import { router, display } from '@kit.ArkUI';
 import { CacheManager, CacheType } from '../model/CacheManager';
 import { RefreshLogger } from '../model/RefreshLogger';
+import { OneBotRequest } from '../model/OneBotModel';
+import { WebSocketManager } from '../model/WebSocketManager';
 import { media } from '@kit.MediaKit';
 
 class MediaItem {
@@ -152,7 +154,31 @@ struct MediaViewerPage {
     }
     let url = this.getCurrent().url;
     if (url === '') { return; }
-    RefreshLogger.getInstance().log('VIDEO-PLAY', 'start url=' + url.substring(0, 100));
+    // UUID 格式（非 HTTP URL）需要先调 get_record 解析为真实 URL
+    if (!url.startsWith('http') && !url.startsWith('/')) {
+      RefreshLogger.getInstance().log('VIDEO-GETREC', 'resolving UUID: ' + url.substring(0, 60));
+      let wsm = WebSocketManager.getInstance();
+      let req = OneBotRequest.createGetRecord(url, 'mp4');
+      wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+        let resolvedUrl = data['url'] as string || '';
+        let outFile = data['file'] as string || '';
+        RefreshLogger.getInstance().log('VIDEO-GETREC-RSP', 'url=' + resolvedUrl.substring(0, 80) + ' file=' + outFile.substring(0, 80));
+        if (resolvedUrl !== '') {
+          this.doPlayVideo(resolvedUrl);
+        } else if (outFile !== '') {
+          this.doPlayVideo(outFile);
+        } else {
+          RefreshLogger.getInstance().log('VIDEO-NOPLAY', 'get_record returned no playable URL');
+          this.videoLoading = false;
+        }
+      });
+      return;
+    }
+    this.doPlayVideo(url);
+  }
+
+  doPlayVideo(playUrl: string): void {
+    RefreshLogger.getInstance().log('VIDEO-PLAY', 'start url=' + playUrl.substring(0, 100));
     this.videoLoading = true;
     if (this.avPlayer !== null) {
       this.avPlayer.release();
@@ -175,7 +201,7 @@ struct MediaViewerPage {
         this.videoLoading = false;
         this.videoPlaying = false;
       });
-      player.url = url.startsWith('http') ? url : ('file://' + url);
+      player.url = playUrl.startsWith('http') ? playUrl : ('file://' + playUrl);
       player.prepare().then(() => {
         RefreshLogger.getInstance().log('VIDEO-PREPARED', 'prepared OK, starting play');
         player.play();

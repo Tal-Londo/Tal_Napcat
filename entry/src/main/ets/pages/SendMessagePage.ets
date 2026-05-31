@@ -411,8 +411,9 @@ struct SendMessagePage {
   }
 
   async sendVoice(): Promise<void> {
-    // 读取录音文件并 base64 编码
-    let fileData = '';
+    // 读取录音文件，base64 编码后通过 data.file 发送
+    // OneBot v11 标准：data.file 支持 base64:// 前缀
+    let sendFile = '';
     try {
       let stat = fileIo.statSync(this.recordedFilePath);
       if (stat.size > 0 && stat.size < 1024 * 1024) {
@@ -421,12 +422,15 @@ struct SendMessagePage {
         fileIo.readSync(file.fd, buf);
         fileIo.closeSync(file);
         let base64Helper = new util.Base64Helper();
-        fileData = base64Helper.encodeToStringSync(new Uint8Array(buf));
+        sendFile = 'base64://' + base64Helper.encodeToStringSync(new Uint8Array(buf));
       }
     } catch (_e) {
     }
-    // 发送：优先 base64，fallback file://
-    let sendFile = fileData !== '' ? ('base64://' + fileData) : ('file://' + this.recordedFilePath);
+    if (sendFile === '') {
+      RefreshLogger.getInstance().log('VOICE-SEND-ERR', 'failed to read/encode voice file');
+      return;
+    }
+    RefreshLogger.getInstance().log('VOICE-SEND', 'sending size=' + sendFile.length + ' file=' + this.recordedFilePath);
     let req = OneBotRequest.createSendVoice(
       this.peerId, this.chatType, sendFile);
     this.wsManager.sendRequest(req);
