@@ -487,6 +487,14 @@ export struct MsgBubble {
           }
         }
         .alignItems(this.isSelf() ? HorizontalAlign.End : HorizontalAlign.Start)
+        .gesture(
+          PanGesture({ direction: PanDirection.Horizontal, distance: 30 })
+            .onActionEnd((event: GestureEvent) => {
+              if (event.offsetX < -20 && this.onSwipeReply) {
+                this.onSwipeReply(this.msg);
+              }
+            })
+        )
 
         if (!this.isSelf()) {
           Blank()
@@ -500,13 +508,5 @@ export struct MsgBubble {
     .width('100%')
     .alignItems(this.isSelf() ? HorizontalAlign.End : HorizontalAlign.Start)
     .onClick(() => {})
-    .gesture(
-      PanGesture({ direction: PanDirection.Horizontal, distance: 30 })
-        .onActionEnd((event: GestureEvent) => {
-          if (event.offsetX < -20 && this.onSwipeReply) {
-            this.onSwipeReply(this.msg);
-          }
-        })
-    )
   }
 }
