@@ -3,6 +3,7 @@ import { ChatStore, ChatItem, CachedMessage, ContactItem, GroupItem } from './Ch
 import { MessageFormatter } from './MessageFormatter';
 import { OneBotMessage, OneBotRequest, WsState } from './OneBotModel';
 import { ConfigManager } from './ConfigManager';
+import { RefreshLogger } from './RefreshLogger';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
 const TAG = 'MessageCenter';
@@ -232,8 +233,17 @@ export class MessageCenter {
     }
   }
 
-  private async onWsMessage(msg: OneBotMessage): Promise<void> {
+  private onWsMessage(msg: OneBotMessage): void {
+    let rl = RefreshLogger.getInstance();
+    rl.log('MC', 'pt=' + msg.post_type + ' nt=' + (msg.notice_type||'') + ' mt=' + msg.message_type);
+
+    if (msg.post_type === 'notice') {
+      this.handleNotice(msg);
+      return;
+    }
+
     if (msg.post_type !== 'message') {
+      rl.log('MC-SKIP', 'not message event');
       return;
     }
 
@@ -242,18 +252,41 @@ export class MessageCenter {
     let selfId = this.selfId;
 
     let cm = MessageFormatter.toCachedMessage(msg, selfId);
-    await this.chatStore.saveMessage(cm);
-
+    // fire-and-forget DB 写入
+    this.chatStore.saveMessage(cm);
     let chatItem = MessageFormatter.buildChatItem(msg, selfId);
-    await this.chatStore.upsertChat(chatItem);
+    this.chatStore.upsertChat(chatItem);
 
+    rl.log('MC-DISP', 'chatId=' + chatId);
     let handler = this.chatHandlers.get(chatId);
     if (handler) {
+      // 直接传 OneBotMessage 给 handler，handler 自己追加到内存数组
       handler(msg);
     }
 
     for (let h of this.globalHandlers) {
       h(msg);
+    }
+  }
+
+  private async handleNotice(msg: OneBotMessage): Promise<void> {
+    let nt = msg.notice_type || '';
+
+    // 消息撤回
+    if (nt === 'friend_recall' || nt === 'group_recall') {
+      let msgId = msg.message_id;
+      await this.chatStore.markRevoked(msgId);
+
+      // 通知聊天页面刷新
+      let chatId = nt.includes('group') ?
+        'group_' + msg.group_id : 'private_' + msg.user_id;
+      let handler = this.chatHandlers.get(chatId);
+      if (handler) {
+        handler(msg);
+      }
+      for (let h of this.globalHandlers) {
+        h(msg);
+      }
     }
   }
 }

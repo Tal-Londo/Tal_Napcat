@@ -2,6 +2,7 @@ import { ArcList, ArcListItem, LengthMetrics } from '@kit.ArkUI';
 import { http } from '@kit.NetworkKit';
 import { promptAction } from '@kit.ArkUI';
 import { WebSocketManager, WsLogEntry, WsEventType } from '../model/WebSocketManager';
+import { ChatStore } from '../model/ChatStore';
 import { WsState } from '../model/OneBotModel';
 
 @CustomDialog
@@ -87,10 +88,16 @@ struct DebugPage {
   listScroller: Scroller = new Scroller();
   private refreshTimer: number = -1;
 
+  private uploadMode: number = 0; // 0=logs, 1=db
+
   uploadDialogController: CustomDialogController = new CustomDialogController({
     builder: UploadIpDialog({
       onConfirm: (ip: string) => {
-        this.doUpload(ip);
+        if (this.uploadMode === 1) {
+          this.doUploadDb(ip);
+        } else {
+          this.doUpload(ip);
+        }
       }
     }),
     autoCancel: true,
@@ -155,6 +162,12 @@ struct DebugPage {
       promptAction.showToast({ message: '暂无日志可上传' });
       return;
     }
+    this.uploadMode = 0;
+    this.uploadDialogController.open();
+  }
+
+  uploadDb(): void {
+    this.uploadMode = 1;
     this.uploadDialogController.open();
   }
 
@@ -331,6 +344,18 @@ struct DebugPage {
               .onClick(() => {
                 if (!this.uploading) { this.openUploadDialog(); }
               })
+
+            Button(this.uploading ? '...' : '上传DB')
+              .fontSize(12)
+              .fontColor('#FFB347')
+              .backgroundColor('#2a2a2a')
+              .width(60)
+              .height(32)
+              .borderRadius(10)
+              .margin({ left: 4 })
+              .onClick(() => {
+                if (!this.uploading) { this.uploadDb(); }
+              })
           }
           .width('100%')
           .justifyContent(FlexAlign.Center)
@@ -415,6 +440,90 @@ struct DebugPage {
     .id('arcListDebug')
     .scrollBar(BarState.Off)
     .padding({ left: 8, right: 8 })
+  }
+
+
+  async doUploadDb(ip: string): Promise<void> {
+    this.uploading = true;
+    this.uploadDone = false;
+
+    let hostCtx = this.getUIContext().getHostContext() as Context;
+    let store = ChatStore.getInstance();
+    await store.initDb(hostCtx);
+    let chats = await store.getChats(200);
+    let msgsPerChat: Record<string, Object>[] = [];
+
+    for (let chat of chats) {
+      let msgs = await store.getMessages(chat.chatId, 200);
+      let msgItems: Record<string, Object>[] = [];
+      for (let m of msgs) {
+        let entry: Record<string, Object> = {
+          'messageId': m.messageId,
+          'chatId': m.chatId,
+          'userId': m.userId,
+          'nickname': m.nickname,
+          'content': m.content,
+          'rawMessage': m.rawMessage,
+          'msgType': m.msgType,
+          'timestamp': m.timestamp,
+          'isSelf': m.isSelf
+        };
+        msgItems.push(entry);
+      }
+
+      let chatEntry: Record<string, Object> = {
+        'chatId': chat.chatId,
+        'peerId': chat.peerId,
+        'peerName': chat.peerName,
+        'chatType': chat.chatType,
+        'lastMessage': chat.lastMessage,
+        'messageCount': msgItems.length,
+        'messages': msgItems
+      };
+      msgsPerChat.push(chatEntry);
+    }
+
+    let dbData: Record<string, Object> = {
+      'app': 'NapcatWatch',
+      'type': 'database_dump',
+      'uploadTime': Date.now(),
+      'totalChats': msgsPerChat.length,
+      'chats': msgsPerChat
+    };
+
+    let url = 'http://' + ip + ':8899/upload';
+    let httpReq = http.createHttp();
+    httpReq.request(url, {
+      method: http.RequestMethod.POST,
+      header: { 'Content-Type': 'application/json' },
+      extraData: JSON.stringify(dbData),
+      expectDataType: http.HttpDataType.STRING,
+      connectTimeout: 5000,
+      readTimeout: 30000
+    }, (err, data) => {
+      this.uploading = false;
+      if (err) {
+        promptAction.showToast({ message: 'DB上传失败: ' + err.message });
+        return;
+      }
+      let body: string;
+      if (data !== null && data !== undefined) {
+        body = data.result as string;
+      } else {
+        body = '';
+      }
+      try {
+        let obj = JSON.parse(body) as Record<string, Object>;
+        if (obj['status'] === 'ok') {
+          this.uploadDone = true;
+          promptAction.showToast({ message: 'DB已上传 ' + msgsPerChat.length.toString() + ' 个会话' });
+        } else {
+          promptAction.showToast({ message: 'DB服务器拒绝' });
+        }
+      } catch (_e) {
+        promptAction.showToast({ message: 'DB已收到响应' });
+      }
+    });
   }
 
   hexToRgba(hex: string, alpha: number): string {

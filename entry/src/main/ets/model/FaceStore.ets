@@ -1,10 +1,12 @@
 export class FaceStore {
   private static map: Map<number, string> = new Map();
+  // 有 APNG 图片资源的 QQ 表情 ID 集合
+  private static apngIds: Set<number> = new Set();
 
   static init(): void {
-    // QQ emoji IDs → Unicode (covering the most common ones)
-    let pairs: [number, string][] = [
-      [0, '\uD83D\uDE04'], [1, '\uD83D\uDE04'], [2, '\uD83D\uDE02'],
+    // 来自 Stapxs QQ Lite normalList (小黄脸/通用表情)，映射到近似 Unicode
+    let unicodePairs: [number, string][] = [
+      [0, '\uD83D\uDE00'], [1, '\uD83D\uDE00'], [2, '\uD83D\uDE02'],
       [3, '\uD83D\uDE18'], [4, '\uD83D\uDE0A'], [5, '\uD83D\uDE2D'],
       [6, '\uD83D\uDE1E'], [7, '\uD83D\uDE33'], [8, '\uD83D\uDE21'],
       [9, '\uD83D\uDE0E'], [10, '\uD83D\uDE0D'], [11, '\uD83D\uDE23'],
@@ -17,60 +19,76 @@ export class FaceStore {
       [30, '\uD83D\uDE27'], [31, '\uD83D\uDE08'], [32, '\uD83D\uDE22'],
       [33, '\uD83D\uDE06'], [34, '\uD83D\uDE1C'], [35, '\uD83D\uDE05'],
       [36, '\uD83D\uDE29'], [37, '\uD83D\uDE1B'], [38, '\uD83D\uDE01'],
-      [39, '\uD83D\uDE00'], [40, '\uD83D\uDE17'], [41, '\uD83D\uDE13'],
-      [42, '\uD83D\uDE2B'], [43, '\uD83D\uDE32'], [44, '\uD83E\uDD2F'],
-      [45, '\uD83E\uDD14'], [46, '\uD83D\uDE09'], [50, '\uD83D\uDE4F'],
-      [51, '\uD83D\uDCAA'], [53, '\uD83C\uDF38'], [54, '\uD83C\uDF39'],
-      [55, '\uD83C\uDF3A'], [56, '\uD83C\uDF37'], [57, '\uD83D\uDC90'],
-      [58, '\uD83C\uDF3B'], [59, '\uD83C\uDF3C'], [60, '\u2615'],
-      [61, '\uD83C\uDF3F'], [63, '\uD83D\uDC7F'], [64, '\uD83D\uDC7B'],
-      [65, '\uD83D\uDC7D'], [66, '\uD83D\uDC7C'], [67, '\uD83D\uDC7E'],
-      [72, '\u26BD'], [73, '\uD83C\uDFBE'], [74, '\uD83C\uDFC0'],
-      [75, '\uD83C\uDFC8'], [76, '\u267B'], [78, '\uD83E\uDD4A'],
-      [79, '\uD83C\uDF56'], [82, '\u2764'], [83, '\uD83D\uDC94'],
-      [84, '\uD83D\uDC4D'], [85, '\uD83D\uDC4E'], [86, '\uD83D\uDC4C'],
-      [87, '\uD83D\uDC4B'], [88, '\uD83D\uDC46'], [89, '\uD83D\uDC47'],
-      [90, '\uD83D\uDC48'], [91, '\uD83D\uDC49'], [92, '\uD83D\uDC4F'],
-      [93, '\uD83D\uDC4E'], [96, '\uD83C\uDF1E'], [97, '\u2601'],
-      [98, '\u2614'], [99, '\u2600'], [100, '\u2744'],
-      [101, '\uD83C\uDF08'], [102, '\uD83C\uDF19'], [103, '\uD83D\uDC7A'],
-      [104, '\uD83D\uDCB0'], [105, '\uD83C\uDF92'], [106, '\uD83C\uDF49'],
-      [107, '\uD83C\uDF4E'], [108, '\uD83C\uDF4C'], [109, '\uD83C\uDF4B'],
-      [110, '\uD83C\uDF4D'], [111, '\uD83C\uDF53'], [112, '\uD83C\uDF47'],
-      [113, '\uD83C\uDF51'], [114, '\uD83C\uDF34'], [115, '\uD83C\uDF35'],
-      [116, '\uD83D\uDCA9'], [120, '\uD83C\uDF64'], [121, '\uD83C\uDF55'],
-      [122, '\uD83C\uDF5D'], [123, '\uD83C\uDF63'], [124, '\uD83C\uDF5B'],
-      [125, '\uD83C\uDF66'], [126, '\uD83C\uDF5A'], [127, '\uD83C\uDF60'],
-      [128, '\uD83C\uDF6E'], [129, '\uD83C\uDF5E'], [130, '\uD83D\uDC15'],
-      [131, '\uD83D\uDC08'], [132, '\uD83D\uDC0D'], [133, '\uD83D\uDC14'],
-      [134, '\uD83D\uDC31'], [135, '\uD83D\uDC12'], [136, '\uD83D\uDC30'],
-      [137, '\uD83D\uDC39'], [138, '\uD83D\uDC3B'], [139, '\uD83D\uDC33'],
-      [140, '\uD83D\uDC3A'], [141, '\uD83D\uDC28'], [142, '\uD83D\uDC0C'],
-      [143, '\uD83D\uDC0F'], [144, '\uD83D\uDC29'], [145, '\uD83D\uDC32'],
-      [146, '\uD83D\uDC1F'], [147, '\uD83D\uDC22'], [148, '\uD83D\uDC0E'],
-      [149, '\uD83D\uDC34'], [150, '\uD83D\uDC0B'], [151, '\uD83D\uDC36'],
-      [152, '\uD83D\uDC13'], [153, '\uD83D\uDC23'], [154, '\uD83D\uDC24'],
-      [155, '\uD83D\uDC27'], [156, '\uD83D\uDC26'], [158, '\uD83D\uDC19'],
-      [159, '\uD83D\uDC1D'], [160, '\uD83D\uDC20'], [164, '\uD83C\uDFC1'],
-      [165, '\uD83D\uDCB0'], [166, '\uD83D\uDC8D'], [168, '\uD83D\uDC99'],
-      [170, '\uD83C\uDF81'], [171, '\uD83C\uDF89'], [172, '\uD83C\uDF88'],
+      [39, '\uD83D\uDE42'], [41, '\uD83D\uDE13'], [42, '\uD83D\uDE2B'],
+      [43, '\uD83D\uDE32'], [46, '\uD83D\uDE09'], [49, '\u2764\uFE0F'],
+      [53, '\uD83C\uDF38'], [56, '\uD83C\uDF37'], [59, '\uD83C\uDF3C'],
+      [60, '\u2615'], [63, '\uD83D\uDC7F'], [64, '\uD83D\uDC7B'],
+      [66, '\uD83D\uDC7C'], [67, '\uD83D\uDC7E'], [74, '\uD83C\uDFBE'],
+      [75, '\uD83C\uDFC8'], [76, '\uD83C\uDFC2'], [77, '\uD83C\uDFC3'],
+      [78, '\uD83E\uDD4A'], [79, '\uD83C\uDF56'], [85, '\uD83D\uDC4E'],
+      [86, '\uD83D\uDC4C'], [89, '\uD83D\uDC47'], [96, '\uD83C\uDF1E'],
+      [97, '\u2601\uFE0F'], [98, '\u2614'], [99, '\u2600\uFE0F'],
+      [100, '\u2744\uFE0F'], [101, '\uD83C\uDF08'], [102, '\uD83C\uDF19'],
+      [103, '\uD83D\uDC7A'], [104, '\uD83D\uDCB0'], [105, '\uD83C\uDF92'],
+      [106, '\uD83C\uDF49'], [107, '\uD83C\uDF4E'], [108, '\uD83C\uDF4C'],
+      [109, '\uD83C\uDF4B'], [110, '\uD83C\uDF4D'], [111, '\uD83C\uDF53'],
+      [112, '\uD83C\uDF47'], [114, '\uD83C\uDF34'], [116, '\uD83D\uDCA9'],
+      [118, '\uD83C\uDF08'], [119, '\uD83D\uDC40'], [120, '\uD83C\uDF64'],
+      [121, '\uD83C\uDF55'], [123, '\uD83C\uDF63'], [124, '\uD83C\uDF5B'],
+      [125, '\uD83C\uDF66'], [129, '\uD83C\uDF5E'], [137, '\uD83D\uDC39'],
+      [144, '\uD83D\uDC29'], [146, '\uD83D\uDC1F'], [147, '\uD83D\uDC22'],
+      [169, '\uD83D\uDC99'], [171, '\uD83C\uDF89'], [172, '\uD83C\uDF88'],
       [173, '\uD83C\uDF8A'], [174, '\uD83C\uDF8D'], [175, '\uD83D\uDC4D'],
       [176, '\uD83D\uDC4E'], [177, '\uD83D\uDC4C'], [178, '\uD83D\uDC4F'],
       [179, '\uD83D\uDC4F'], [180, '\u2615'], [181, '\uD83C\uDF7A'],
-      [182, '\uD83C\uDF7B'], [183, '\uD83C\uDF78'], [184, '\uD83C\uDF79'],
-      [185, '\uD83C\uDF76'], [186, '\uD83C\uDF7D'], [187, '\uD83C\uDF69'],
-      [188, '\uD83C\uDF82'], [190, '\uD83C\uDF1D'], [191, '\uD83D\uDE0F'],
-      [192, '\uD83E\uDD14'], [193, '\uD83D\uDE0F'], [194, '\uD83D\uDE0F'],
-      [200, '\uD83C\uDF89'], [201, '\uD83C\uDF89'], [202, '\uD83C\uDF89'],
-      [203, '\uD83D\uDC4D'], [204, '\uD83D\uDC4E'], [205, '\uD83D\uDC4F'],
-      [210, '\uD83D\uDC4B'], [211, '\uD83D\uDC4B'], [212, '\uD83D\uDC4B'],
-      [213, '\uD83D\uDC4B'], [214, '\uD83D\uDC4B'], [220, '\uD83C\uDF1E'],
-      [260, '\uD83D\uDC4D'], [261, '\uD83D\uDC4E'], [262, '\uD83D\uDC4F'],
-      [263, '\uD83D\uDC4B'], [264, '\uD83D\uDC4B'], [265, '\uD83D\uDC4B'],
-      [311, '\uD83D\uDE02'], [312, '\uD83D\uDE2D'],
+      [182, '\uD83C\uDF7B'], [183, '\uD83C\uDF78'], [185, '\uD83C\uDF76'],
+      [187, '\uD83C\uDF69'], [201, '\uD83C\uDF89'], [212, '\uD83D\uDC49'],
+      [262, '\uD83D\uDC4F'], [263, '\uD83D\uDC4B'], [264, '\uD83D\uDC4B'],
+      [265, '\uD83D\uDC4B'], [266, '\uD83D\uDC4B'], [267, '\uD83D\uDC4B'],
+      [268, '\uD83D\uDC4B'], [269, '\uD83D\uDC4B'], [270, '\uD83D\uDC4B'],
+      [271, '\uD83D\uDC4B'], [272, '\uD83D\uDC4B'], [273, '\uD83D\uDC4B'],
+      [277, '\uD83D\uDC4B'], [281, '\uD83D\uDC4B'], [282, '\uD83D\uDC4B'],
+      [283, '\uD83D\uDC4B'], [284, '\uD83D\uDC4B'], [285, '\uD83D\uDC4B'],
+      [286, '\uD83D\uDC4B'], [287, '\uD83D\uDC4B'], [289, '\uD83D\uDC4B'],
+      [293, '\uD83D\uDC4B'], [294, '\uD83D\uDC4B'], [295, '\uD83D\uDC4B'],
+      [297, '\uD83D\uDC4B'], [298, '\uD83D\uDC4B'], [299, '\uD83D\uDC4B'],
+      [300, '\uD83D\uDC4B'], [302, '\uD83D\uDC4B'], [303, '\uD83D\uDC4B'],
+      [305, '\uD83D\uDC4B'], [306, '\uD83D\uDC4B'], [307, '\uD83D\uDC4B'],
+      [311, '\uD83D\uDE02'], [312, '\uD83D\uDE2D'], [323, '\uD83D\uDC4B'],
+      [324, '\uD83D\uDC4B'], [325, '\uD83D\uDC4B'], [326, '\uD83D\uDC4B'],
+      [332, '\uD83D\uDC4B'], [333, '\uD83D\uDC4B'], [334, '\uD83D\uDC4B'],
+      [336, '\uD83D\uDC4B'], [337, '\uD83D\uDC4B'], [338, '\uD83D\uDC4B'],
+      [339, '\uD83D\uDC4B'], [341, '\uD83D\uDC4B'], [342, '\uD83D\uDC4B'],
+      [343, '\uD83D\uDC4B'], [344, '\uD83D\uDC4B'], [345, '\uD83D\uDC4B'],
+      [346, '\uD83D\uDC4B'], [347, '\uD83D\uDC4B'], [349, '\uD83D\uDC4B'],
+      [350, '\uD83D\uDC4B'], [351, '\uD83D\uDC4B'], [352, '\uD83D\uDC4B'],
+      [353, '\uD83D\uDC4B'], [354, '\uD83D\uDC4B'], [355, '\uD83D\uDC4B'],
+      [356, '\uD83D\uDC4B'], [357, '\uD83D\uDC4B'], [392, '\uD83D\uDC4B'],
+      [415, '\uD83D\uDC4B'], [419, '\uD83D\uDC4B'], [424, '\uD83D\uDC4B'],
+      [425, '\uD83D\uDC4B'], [426, '\uD83D\uDC4B'], [427, '\uD83D\uDC4B'],
+      [428, '\uD83D\uDC4B'], [429, '\uD83D\uDC4B'],
     ];
-    for (let p of pairs) {
+
+    for (let p of unicodePairs) {
       FaceStore.map.set(p[0], p[1]);
+    }
+
+    // 标记所有 Stapxs normalList 中的 ID（有 APNG 图片资源）
+    let apngList: number[] = [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 41, 42,
+      43, 46, 49, 53, 56, 59, 60, 63, 64, 66, 67, 74, 75, 76, 77, 78, 79, 85, 86, 89,
+      96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112,
+      114, 116, 118, 119, 120, 121, 123, 124, 125, 129, 137, 144, 146, 147, 169, 171,
+      172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 185, 187, 201, 212,
+      262, 263, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 277, 281, 282, 283,
+      284, 285, 286, 287, 289, 293, 294, 295, 297, 298, 299, 300, 302, 303, 305, 306,
+      307, 311, 312, 323, 324, 325, 326, 332, 333, 334, 336, 337, 338, 339, 341, 342,
+      343, 344, 345, 346, 347, 349, 350, 351, 352, 353, 354, 355, 356, 357, 392, 415,
+      419, 424, 425, 426, 427, 428, 429
+    ];
+    for (let id of apngList) {
+      FaceStore.apngIds.add(id);
     }
   }
 
@@ -80,6 +98,35 @@ export class FaceStore {
 
   static hasFace(faceId: number): boolean {
     return FaceStore.map.has(faceId);
+  }
+
+  // 获取 APNG 图片地址（Stapxs 同款 CDN）
+  static getAllFaceIds(): number[] {
+    // 返回内置的 apngList 中所有 ID (已排序)
+    let result: number[] = [];
+    let apngList: number[] = [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+      22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 41, 42,
+      43, 46, 49, 53, 56, 59, 60, 63, 64, 66, 67, 74, 75, 76, 77, 78, 79, 85, 86, 89,
+      96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112,
+      114, 116, 118, 119, 120, 121, 123, 124, 125, 129, 137, 144, 146, 147, 169, 171,
+      172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 185, 187, 201, 212,
+      262, 263, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 277, 281, 282, 283,
+      284, 285, 286, 287, 289, 293, 294, 295, 297, 298, 299, 300, 302, 303, 305, 306,
+      307, 311, 312, 323, 324, 325, 326, 332, 333, 334, 336, 337, 338, 339, 341, 342,
+      343, 344, 345, 346, 347, 349, 350, 351, 352, 353, 354, 355, 356, 357, 392, 415,
+      419, 424, 425, 426, 427, 428, 429
+    ];
+    return apngList;
+  }
+
+  static getApngUrl(faceId: number): string {
+    return 'https://lib.stapxs.cn/download/stapxs-qq-lite/qq_emoji/' + faceId + '/apng/' + faceId + '.png';
+  }
+
+  // 该 ID 是否在已知的 APNG 资源列表中
+  static hasApng(faceId: number): boolean {
+    return FaceStore.apngIds.has(faceId);
   }
 }
 

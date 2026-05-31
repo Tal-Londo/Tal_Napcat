@@ -7,6 +7,7 @@
     "pages/DebugPage",
     "pages/MediaViewerPage",
     "pages/SendMessagePage",
-    "pages/CrownDebugPage"
+    "pages/CrownDebugPage",
+    "pages/RefreshLogPage"
   ]
 }

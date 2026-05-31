@@ -74,6 +74,22 @@ export class OneBotRequest {
     return req;
   }
 
+  static createGetGroupMemberInfo(groupId: number, userId: number, echo?: string): OneBotRequest {
+    let req = new OneBotRequest();
+    req.action = 'get_group_member_info';
+    req.params = { 'group_id': groupId, 'user_id': userId, 'no_cache': true };
+    req.echo = echo || 'get_group_member_info';
+    return req;
+  }
+
+  static createGetGroupMemberList(groupId: number, echo?: string): OneBotRequest {
+    let req = new OneBotRequest();
+    req.action = 'get_group_member_list';
+    req.params = { 'group_id': groupId, 'no_cache': true };
+    req.echo = echo || 'get_group_member_list';
+    return req;
+  }
+
   toJson(): string {
     return JSON.stringify(this);
   }

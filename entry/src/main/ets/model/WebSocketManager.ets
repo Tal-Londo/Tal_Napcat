@@ -3,6 +3,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { util } from '@kit.ArkTS';
 import { WsState, OneBotMessage } from './OneBotModel';
+import { RefreshLogger } from './RefreshLogger';
 
 const TAG = 'WebSocketManager';
 const DOMAIN = 0x0003;
@@ -241,9 +242,9 @@ export class WebSocketManager {
           let textDecoder = util.TextDecoder.create();
           let data: string = typeof value === 'string' ? value :
           textDecoder.decodeToString(new Uint8Array(value as ArrayBuffer));
-          hilog.info(DOMAIN, TAG, `Message received: ${data.substring(0, 200)}`);
           let preview: string = data.length > 300 ? data.substring(0, 300) + '...' : data;
           this.addLog(WsEventType.RECV, preview);
+          // fire-and-forget the async handler
           this.handleMessage(data);
         });
 
@@ -386,6 +387,9 @@ export class WebSocketManager {
       // 处理推送事件（有 post_type 字段）
       if (obj['post_type'] !== undefined) {
         let msg = raw as OneBotMessage;
+        RefreshLogger.getInstance().log('WS-DISPATCH',
+          'pt=' + msg.post_type + ' mt=' + msg.message_type +
+          ' uid=' + msg.user_id + ' text=' + (msg.raw_message||'').substring(0,20));
         if (this.onMessage) {
           this.onMessage(msg);
         }

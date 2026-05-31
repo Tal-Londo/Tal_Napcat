@@ -367,6 +367,24 @@ export struct SettingsTab {
         }
         .width('82%')
 
+        // 刷新日志入口
+        ArcListItem() {
+          Column() {
+            SymbolGlyph($r('sys.symbol.doc_text'))
+              .fontColor(['#00FF88'])
+              .fontSize(20)
+              .margin({ bottom: 4 })
+            Text('消息刷新日志')
+              .fontSize(14)
+              .fontColor('#00FF88')
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Center)
+          .padding({ top: 14, bottom: 14 })
+          .onClick(() => { router.pushUrl({ url: 'pages/RefreshLogPage' }); })
+        }
+        .width('82%')
+
         // Crown 调试入口
         ArcListItem() {
           Column() {

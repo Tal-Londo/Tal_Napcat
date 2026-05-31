@@ -1,4 +1,4 @@
-import { CachedMessage } from '../model/ChatStore';
+import { CachedMessage, ChatStore, GroupMember } from '../model/ChatStore';
 import { CacheManager, CacheType } from '../model/CacheManager';
 import { FaceStore } from '../model/FaceStore';
 import { router } from '@kit.ArkUI';
@@ -21,6 +21,7 @@ export struct MsgBubble {
   @Prop showTime: boolean = false;
   @Prop allMediaUrls: string[] = [];
   @Prop allMessages: CachedMessage[] = [];
+  @Prop groupPeerId: number = 0;
   onLongPress?: (msg: CachedMessage) => void;
 
   isSelf(): boolean {
@@ -124,11 +125,60 @@ export struct MsgBubble {
     if (seg.text !== '') {
       return '@' + seg.text;
     }
+    // 尝试从群成员缓存查找昵称
+    if (this.groupPeerId > 0) {
+      let member = ChatStore.getInstance().getGroupMember(this.groupPeerId, parseInt(seg.qq));
+      if (member !== null) {
+        return '@' + member.getDisplayName();
+      }
+    }
     return '@' + seg.qq;
+  }
+
+  getRoleBadge(): string {
+    let role = this.msg.senderRole || '';
+    if (role === 'owner') {
+      return '群主';
+    }
+    if (role === 'admin') {
+      return '管理员';
+    }
+    return '';
+  }
+
+  getRoleBadgeColor(): string {
+    let role = this.msg.senderRole || '';
+    if (role === 'owner') {
+      return '#FFB347';
+    }
+    if (role === 'admin') {
+      return '#00CC88';
+    }
+    return '';
+  }
+
+  getSenderTitle(): string {
+    if (this.msg.senderRole === '' || this.msg.senderRole === 'member') {
+      if (this.groupPeerId > 0) {
+        let member = ChatStore.getInstance().getGroupMember(this.groupPeerId, this.msg.userId);
+        if (member !== null && member.title !== '') {
+          return member.title;
+        }
+      }
+    }
+    return '';
   }
 
   getFaceEmoji(faceId: string): string {
     return FaceStore.getFace(parseInt(faceId) || 0);
+  }
+
+  getFaceImageUrl(faceId: string): string {
+    return '';
+  }
+
+  getFaceResource(faceId: string): Resource {
+    return $rawfile('face/' + faceId + '.png');
   }
 
   getSegments(): MsgSegment[] {
@@ -206,14 +256,43 @@ export struct MsgBubble {
 
         Column() {
           if (!this.isSelf()) {
-            Text(this.msg.nickname || ('用户' + this.msg.userId))
-              .fontSize(10)
-              .fontColor('#888888')
-              .maxLines(1)
-              .margin({ bottom: 2, left: 2 })
+            Row() {
+              Text(this.msg.nickname || ('用户' + this.msg.userId))
+                .fontSize(10)
+                .fontColor('#888888')
+                .maxLines(1)
+              if (this.getRoleBadge() !== '') {
+                Text(this.getRoleBadge())
+                  .fontSize(9)
+                  .fontColor(this.getRoleBadgeColor())
+                  .backgroundColor(this.getRoleBadgeColor() + '22')
+                  .borderRadius(3)
+                  .padding({ left: 3, right: 3, top: 1, bottom: 1 })
+                  .margin({ left: 4 })
+              }
+              if (this.getSenderTitle() !== '') {
+                Text(this.getSenderTitle())
+                  .fontSize(9)
+                  .fontColor('#C0B8E0')
+                  .backgroundColor('#C0B8E022')
+                  .borderRadius(3)
+                  .padding({ left: 3, right: 3, top: 1, bottom: 1 })
+                  .margin({ left: 4 })
+              }
+            }
+            .margin({ bottom: 2, left: 2 })
           }
 
-          Column() {
+          if (this.msg.isRevoked()) {
+            Text('消息已被撤回')
+              .fontSize(11)
+              .fontColor('#888888')
+              .fontStyle(FontStyle.Italic)
+              .textAlign(TextAlign.Center)
+              .width('100%')
+              .padding({ left: 10, right: 10, top: 7, bottom: 7 })
+          } else {
+            Column() {
             ForEach(this.getSegments(), (seg: MsgSegment, i: number) => {
               if (seg.type === 'text') {
                 Text(seg.text || '')
@@ -247,15 +326,11 @@ export struct MsgBubble {
                 }
               }
               if (seg.type === 'face') {
-                if (this.getFaceEmoji(seg.faceId) !== '') {
-                  Text(this.getFaceEmoji(seg.faceId))
-                    .fontSize(20)
-                    .margin({ left: 1, right: 1 })
-                } else {
-                  Text('[表情' + (seg.faceId !== '' ? ':' + seg.faceId : '') + ']')
-                    .fontSize(12)
-                    .fontColor(this.isSelf() ? '#555555' : '#AAAAAA')
-                }
+                Image(this.getFaceResource(seg.faceId))
+                  .width(22)
+                  .height(22)
+                  .objectFit(ImageFit.Contain)
+                  .margin({ left: 1, right: 1, top: 1, bottom: 1 })
               }
               if (seg.type === 'at') {
                 Text(this.getAtName(seg) + ' ')
@@ -321,6 +396,7 @@ export struct MsgBubble {
             .fontSize(10)
             .fontColor('#555555')
             .margin({ top: 2, left: 4 })
+          }
         }
         .alignItems(this.isSelf() ? HorizontalAlign.End : HorizontalAlign.Start)
 

@@ -86,6 +86,11 @@ export class CachedMessage {
   msgType: string = '';
   timestamp: number = 0;
   isSelf: boolean = false;
+  senderRole: string = '';
+
+  isRevoked(): boolean {
+    return this.msgType === 'revoked';
+  }
 
   static fromRow(row: MsgRow): CachedMessage {
     let msg = new CachedMessage();
@@ -98,6 +103,21 @@ export class CachedMessage {
     msg.msgType = row.msg_type;
     msg.timestamp = row.timestamp;
     msg.isSelf = row.is_self === 1;
+    return msg;
+  }
+
+  static fromMsg(src: CachedMessage): CachedMessage {
+    let msg = new CachedMessage();
+    msg.messageId = src.messageId;
+    msg.chatId = src.chatId;
+    msg.userId = src.userId;
+    msg.nickname = src.nickname;
+    msg.content = src.content;
+    msg.rawMessage = src.rawMessage;
+    msg.msgType = src.msgType;
+    msg.timestamp = src.timestamp;
+    msg.isSelf = src.isSelf;
+    msg.senderRole = src.senderRole;
     return msg;
   }
 }
@@ -126,6 +146,7 @@ export class GroupItem {
   groupId: number = 0;
   groupName: string = '';
   memberCount: number = 0;
+  groupAllShut: number = 0;
 
   static fromRow(row: GroupRow): GroupItem {
     let g = new GroupItem();
@@ -133,6 +154,21 @@ export class GroupItem {
     g.groupName = row.group_name;
     g.memberCount = row.member_count;
     return g;
+  }
+}
+
+export class GroupMember {
+  userId: number = 0;
+  nickname: string = '';
+  card: string = '';
+  role: string = '';
+  title: string = '';
+
+  getDisplayName(): string {
+    if (this.card !== '') {
+      return this.card;
+    }
+    return this.nickname;
   }
 }
 
@@ -189,12 +225,46 @@ export class ChatStore {
   private static instance: ChatStore;
   private rdbStore: relationalStore.RdbStore | null = null;
   private initialized: boolean = false;
+  private memberCache: Record<number, Record<number, GroupMember>> = {};
 
   static getInstance(): ChatStore {
     if (ChatStore.instance === undefined) {
       ChatStore.instance = new ChatStore();
     }
     return ChatStore.instance;
+  }
+
+  // ========== Members Cache ==========
+
+  setGroupMembers(groupId: number, members: GroupMember[]): void {
+    let map: Record<number, GroupMember> = {};
+    for (let m of members) {
+      map[m.userId] = m;
+    }
+    this.memberCache[groupId] = map;
+  }
+
+  getGroupMember(groupId: number, userId: number): GroupMember | null {
+    let map = this.memberCache[groupId];
+    if (map !== undefined) {
+      let m = map[userId];
+      if (m !== undefined) {
+        return m;
+      }
+    }
+    return null;
+  }
+
+  getAllGroupMembers(groupId: number): GroupMember[] {
+    let result: GroupMember[] = [];
+    let map = this.memberCache[groupId];
+    if (map !== undefined) {
+      let keys = Object.keys(map);
+      for (let k of keys) {
+        result.push(map[parseInt(k)]);
+      }
+    }
+    return result;
   }
 
   async initDb(context: Context): Promise<void> {
@@ -330,6 +400,12 @@ export class ChatStore {
       'is_self': msg.isSelf ? 1 : 0
     };
     try {
+      // 有真实 ID 的消息：先删旧行再插入，避免重复
+      if (msg.messageId > 0) {
+        let delPred = new relationalStore.RdbPredicates('messages');
+        delPred.equalTo('message_id', msg.messageId);
+        await this.rdbStore.delete(delPred);
+      }
       await this.rdbStore.insert('messages', bucket);
       await this.trimMessages(msg.chatId);
     } catch (err) {
@@ -364,6 +440,23 @@ export class ChatStore {
       let predicates = new relationalStore.RdbPredicates('messages');
       predicates.equalTo('chat_id', chatId);
       await this.rdbStore.delete(predicates);
+    } catch (err) {
+    }
+  }
+
+  async markRevoked(messageId: number): Promise<void> {
+    if (this.rdbStore === null || messageId <= 0) {
+      return;
+    }
+    try {
+      let bucket: relationalStore.ValuesBucket = {
+        'msg_type': 'revoked',
+        'raw_message': '消息已被撤回',
+        'content': '[]'
+      };
+      let predicates = new relationalStore.RdbPredicates('messages');
+      predicates.equalTo('message_id', messageId);
+      await this.rdbStore.update(bucket, predicates);
     } catch (err) {
     }
   }
