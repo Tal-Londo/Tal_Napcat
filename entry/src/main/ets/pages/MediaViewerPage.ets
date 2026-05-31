@@ -129,7 +129,7 @@ struct MediaViewerPage {
     }
   }
 
-  async toggleVideoPlay(): Promise<void> {
+  toggleVideoPlay(): void {
     if (this.videoPlaying) {
       this.stopVideo();
       return;
@@ -141,36 +141,35 @@ struct MediaViewerPage {
     if (url === '') {
       return;
     }
-    try {
-      this.videoLoading = true;
-      if (this.avPlayer !== null) {
-        await this.avPlayer.reset();
-      }
-      this.avPlayer = await media.createAVPlayer();
-      this.avPlayer.on('stateChange', (state: string) => {
+    this.videoLoading = true;
+    if (this.avPlayer !== null) {
+      this.avPlayer.release();
+      this.avPlayer = null;
+    }
+    media.createAVPlayer().then((player: media.AVPlayer) => {
+      this.avPlayer = player;
+      player.on('stateChange', (state: string) => {
         if (state === 'playing') {
           this.videoLoading = false;
           this.videoPlaying = true;
         }
-        if (state === 'stopped' || state === 'error' || state === 'completed') {
+        if (state === 'stopped' || state === 'completed') {
           this.videoPlaying = false;
         }
       });
-      this.avPlayer.on('error', () => {
+      player.on('error', () => {
         this.videoLoading = false;
         this.videoPlaying = false;
       });
-      if (url.startsWith('http')) {
-        this.avPlayer.url = url;
-      } else {
-        this.avPlayer.url = 'file://' + url;
-      }
-      await this.avPlayer.prepare();
-      await this.avPlayer.play();
-    } catch (_e) {
+      player.url = url.startsWith('http') ? url : ('file://' + url);
+      player.prepare().then(() => {
+        player.play();
+      }).catch(() => {
+        this.videoLoading = false;
+      });
+    }).catch(() => {
       this.videoLoading = false;
-      this.videoPlaying = false;
-    }
+    });
   }
 
   stopVideo(): void {
@@ -178,10 +177,10 @@ struct MediaViewerPage {
     this.videoLoading = false;
     if (this.avPlayer !== null) {
       try {
-        this.avPlayer.stop();
-        this.avPlayer.reset();
+        this.avPlayer.release();
       } catch (_e) {
       }
+      this.avPlayer = null;
     }
   }
 
@@ -229,55 +228,54 @@ struct MediaViewerPage {
       }
 
       if (this.urls.length > 0 && this.mediaType === 'video') {
-        Stack({ alignContent: Alignment.Center }) {
-          Column()
-            .width('100%')
-            .height('100%')
-            .backgroundColor('#000000')
-
-          if (!this.videoLoading && !this.videoPlaying) {
-            Column() {
-              SymbolGlyph($r('sys.symbol.play_circle'))
-                .fontSize(48)
-                .fontColor(['#C0B8E0'])
-                .onClick(() => { this.toggleVideoPlay(); })
-                .margin({ bottom: 8 })
-              Text('点击播放视频')
-                .fontSize(12)
-                .fontColor('#888888')
-            }
-            .width('100%')
-            .height('100%')
-            .justifyContent(FlexAlign.Center)
+        Column() {
+          // 顶部关闭按钮
+          Row() {
+            Blank()
+            SymbolGlyph($r('sys.symbol.xmark_circle'))
+              .fontSize(18)
+              .fontColor([Color.White])
+              .onClick(() => {
+                this.stopVideo();
+                this.close();
+              })
           }
+          .width('100%')
+          .padding({ top: 6, right: 6 })
+
+          Blank()
 
           if (this.videoLoading) {
             LoadingProgress()
-              .width(40)
-              .height(40)
+              .width(36)
+              .height(36)
               .color('#C0B8E0')
-          }
-
-          if (this.videoPlaying) {
-            XComponent({ id: 'videoPlayer', type: XComponentType.SURFACE, libraryname: 'video' })
-              .width('100%')
-              .height('100%')
+          } else if (this.videoPlaying) {
+            Text('播放中')
+              .fontSize(14)
+              .fontColor('#C0B8E0')
+          } else {
+            SymbolGlyph($r('sys.symbol.play_circle'))
+              .fontSize(48)
+              .fontColor(['#C0B8E0'])
               .onClick(() => { this.toggleVideoPlay(); })
           }
 
-          // 旋转关闭
-          SymbolGlyph($r('sys.symbol.xmark_circle'))
-            .fontSize(22)
-            .fontColor([Color.White])
-            .margin({ top: 8, right: 8 })
-            .onClick(() => {
-              this.stopVideo();
-              this.close();
-            })
+          Text(this.videoPlaying ? '点击暂停' : this.videoLoading ? '加载中...' : '点击播放视频')
+            .fontSize(12)
+            .fontColor('#888888')
+            .margin({ top: 12 })
+
+          Blank()
         }
         .width('100%')
         .height('100%')
-        .position({ x: 0, y: 0 })
+        .backgroundColor('#000000')
+        .onClick(() => {
+          if (this.videoPlaying) {
+            this.stopVideo();
+          }
+        })
       }
 
       // 页码指示器
