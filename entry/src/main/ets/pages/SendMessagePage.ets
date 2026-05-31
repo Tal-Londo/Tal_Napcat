@@ -7,6 +7,8 @@ import { RefreshLogger } from '../model/RefreshLogger';
 import { OneBotRequest } from '../model/OneBotModel';
 import { media } from '@kit.MediaKit';
 import { fileIo } from '@kit.CoreFileKit';
+import { util } from '@kit.ArkTS';
+import { promptAction } from '@kit.ArkUI';
 
 class SqPlaceholder {
   key: string = '';
@@ -394,8 +396,24 @@ struct SendMessagePage {
   }
 
   async sendVoice(): Promise<void> {
+    // 读取录音文件并 base64 编码
+    let fileData = '';
+    try {
+      let stat = fileIo.statSync(this.recordedFilePath);
+      if (stat.size > 0 && stat.size < 1024 * 1024) {
+        let file = fileIo.openSync(this.recordedFilePath, fileIo.OpenMode.READ_ONLY);
+        let buf = new ArrayBuffer(stat.size);
+        fileIo.readSync(file.fd, buf);
+        fileIo.closeSync(file);
+        let base64Helper = new util.Base64Helper();
+        fileData = base64Helper.encodeToStringSync(new Uint8Array(buf));
+      }
+    } catch (_e) {
+    }
+    // 发送：优先 base64，fallback file://
+    let sendFile = fileData !== '' ? ('base64://' + fileData) : ('file://' + this.recordedFilePath);
     let req = OneBotRequest.createSendVoice(
-      this.peerId, this.chatType, this.recordedFilePath);
+      this.peerId, this.chatType, sendFile);
     this.wsManager.sendRequest(req);
 
     // 保存本地占位消息
@@ -610,7 +628,7 @@ struct SendMessagePage {
             fontSize: new LengthMetrics(15, LengthUnit.FP),
             onClick: () => {
               if (this.isRecording) {
-                this.toggleRecording();
+                this.stopRecording();
               } else {
                 this.sendAndClose();
               }

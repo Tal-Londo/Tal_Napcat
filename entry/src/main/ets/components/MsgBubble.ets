@@ -222,6 +222,8 @@ export struct MsgBubble {
           s.replyId = data['id'] as string || '';
           if (s.type === 'record') {
             s.recordFile = data['file'] as string || '';
+            // 优先使用 data.url 直接播放
+            s.url = data['url'] as string || '';
           }
           if (s.type === 'video') {
             s.videoFile = data['file'] as string || data['url'] as string || '';
@@ -244,53 +246,63 @@ export struct MsgBubble {
       this.stopVoice();
       return;
     }
-    if (seg.recordFile === '') {
+    // 优先用已有的 URL（data.url 或已下载的）
+    if (seg.url !== '' && seg.url.startsWith('http')) {
+      this.startVoicePlay(seg.url);
       return;
     }
     if (this.voiceDownloaded !== '') {
       this.startVoicePlay(this.voiceDownloaded);
       return;
     }
-    // 调用 get_record 获取可播放的语音文件
+    if (seg.recordFile === '') {
+      return;
+    }
+    // 调用 get_record 获取可播放 URL
     let wsm = WebSocketManager.getInstance();
     let req = OneBotRequest.createGetRecord(seg.recordFile, 'mp3');
     wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+      let url = data['url'] as string || '';
       let outFile = data['file'] as string || '';
-      if (outFile !== '') {
+      if (url !== '') {
+        this.voiceDownloaded = url;
+        this.startVoicePlay(url);
+      } else if (outFile !== '') {
         this.voiceDownloaded = outFile;
         this.startVoicePlay(outFile);
-      } else {
-        let url = data['url'] as string || '';
-        if (url !== '') {
-          this.voiceDownloaded = url;
-          this.startVoicePlay(url);
-        }
       }
     });
   }
 
-  async startVoicePlay(pathOrUrl: string): Promise<void> {
+  startVoicePlay(pathOrUrl: string): void {
     try {
       if (this.avPlayer !== null) {
-        await this.avPlayer.reset();
+        this.avPlayer.release();
       }
-      this.avPlayer = await media.createAVPlayer();
-      this.avPlayer.on('stateChange', (state: string) => {
-        if (state === 'stopped' || state === 'error' || state === 'completed') {
+      media.createAVPlayer().then((player: media.AVPlayer) => {
+        this.avPlayer = player;
+        player.on('stateChange', (state: string) => {
+          if (state === 'stopped' || state === 'completed') {
+            this.voicePlaying = false;
+          }
+        });
+        player.on('error', () => {
           this.voicePlaying = false;
+        });
+        if (pathOrUrl.startsWith('http')) {
+          player.url = pathOrUrl;
+        } else {
+          player.url = 'file://' + pathOrUrl;
         }
-      });
-      this.avPlayer.on('error', () => {
+        player.prepare().then(() => {
+          player.play();
+          this.voicePlaying = true;
+        }).catch(() => {
+          this.voicePlaying = false;
+        });
+      }).catch(() => {
         this.voicePlaying = false;
       });
-      if (pathOrUrl.startsWith('http')) {
-        this.avPlayer.url = pathOrUrl;
-      } else {
-        this.avPlayer.url = 'file://' + pathOrUrl;
-      }
-      await this.avPlayer.prepare();
-      await this.avPlayer.play();
-      this.voicePlaying = true;
     } catch (_e) {
       this.voicePlaying = false;
     }
@@ -300,10 +312,10 @@ export struct MsgBubble {
     this.voicePlaying = false;
     if (this.avPlayer !== null) {
       try {
-        this.avPlayer.stop();
-        this.avPlayer.reset();
+        this.avPlayer.release();
       } catch (_e) {
       }
+      this.avPlayer = null;
     }
   }
 
@@ -450,14 +462,16 @@ export struct MsgBubble {
               if (seg.type === 'record') {
                 Row() {
                   SymbolGlyph($r('sys.symbol.play_circle'))
-                    .fontSize(16)
+                    .fontSize(18)
                     .fontColor([this.isSelf() ? '#333333' : '#C0B8E0'])
-                  Text(this.voicePlaying ? '播放中...' : '语音消息')
+                  Text(this.voicePlaying ? ' 播放中...' : ' 语音')
                     .fontSize(12)
                     .fontColor(this.isSelf() ? '#333333' : '#EEEEEE')
-                    .margin({ left: 4 })
                 }
-                .padding({ top: 4, bottom: 4, left: 6, right: 10 })
+                .width('100%')
+                .height(36)
+                .justifyContent(FlexAlign.Center)
+                .alignItems(VerticalAlign.Center)
                 .onClick(() => { this.toggleVoicePlay(seg); })
               }
               if (seg.type === 'video') {

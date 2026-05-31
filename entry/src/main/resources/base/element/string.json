@@ -151,6 +151,10 @@
     {
       "name": "connecting_server",
       "value": "正在连接服务器..."
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "用于录制语音消息"
     }
   ]
 }
