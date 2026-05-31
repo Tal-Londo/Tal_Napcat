@@ -410,5 +410,6 @@ export struct MsgBubble {
     }
     .width('100%')
     .alignItems(this.isSelf() ? HorizontalAlign.End : HorizontalAlign.Start)
+    .onClick(() => {})
   }
 }
