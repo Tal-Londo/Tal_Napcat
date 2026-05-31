@@ -352,7 +352,7 @@ struct SendMessagePage {
             .width('100%')
             .padding({ bottom: 6 })
 
-            ForEach(this.memberList.slice(0, 15), (member: GroupMember) => {
+            ForEach(this.memberList.slice(0, 8), (member: GroupMember) => {
               Row() {
                 Text(member.getDisplayName())
                   .fontSize(13)
@@ -398,15 +398,15 @@ struct SendMessagePage {
             .padding({ bottom: 6 })
 
             Grid() {
-              ForEach(this.allFaceIds.slice(0, 48), (fid: number) => {
+              ForEach(this.allFaceIds.slice(0, 24), (fid: number) => {
                 GridItem() {
                   Image($rawfile('face/' + fid + '.png'))
-                    .width(28)
-                    .height(28)
+                    .width(22)
+                    .height(22)
                     .objectFit(ImageFit.Contain)
                 }
-                .width(34)
-                .height(34)
+                .width(28)
+                .height(28)
                 .onClick(() => { this.pickFace(fid); })
               }, (fid: number) => fid.toString())
             }
