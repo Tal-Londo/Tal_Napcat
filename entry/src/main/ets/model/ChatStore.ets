@@ -344,6 +344,50 @@ export class ChatStore {
     }
   }
 
+  async resetUnread(chatId: string): Promise<void> {
+    if (this.rdbStore === null) {
+      return;
+    }
+    try {
+      let bucket: relationalStore.ValuesBucket = { 'unread_count': 0 };
+      let predicates = new relationalStore.RdbPredicates('chats');
+      predicates.equalTo('chat_id', chatId);
+      await this.rdbStore.update(bucket, predicates);
+    } catch (err) {
+    }
+  }
+
+  async getChatByChatId(chatId: string): Promise<ChatItem | null> {
+    if (this.rdbStore === null) {
+      return null;
+    }
+    try {
+      let predicates = new relationalStore.RdbPredicates('chats');
+      predicates.equalTo('chat_id', chatId);
+      let rs = await this.rdbStore.query(predicates);
+      if (rs.goToNextRow()) {
+        let row: ChatRow = {
+          id: rs.getLong(rs.getColumnIndex('id')),
+          chat_id: rs.getString(rs.getColumnIndex('chat_id')),
+          chat_type: rs.getString(rs.getColumnIndex('chat_type')),
+          peer_id: rs.getLong(rs.getColumnIndex('peer_id')),
+          peer_name: rs.getString(rs.getColumnIndex('peer_name')),
+          avatar_url: rs.getString(rs.getColumnIndex('avatar_url')),
+          last_message: rs.getString(rs.getColumnIndex('last_message')),
+          last_message_time: rs.getLong(rs.getColumnIndex('last_message_time')),
+          unread_count: rs.getLong(rs.getColumnIndex('unread_count')),
+          is_top: rs.getLong(rs.getColumnIndex('is_top')),
+          updated_at: rs.getLong(rs.getColumnIndex('updated_at'))
+        };
+        rs.close();
+        return ChatItem.fromRow(row);
+      }
+      rs.close();
+    } catch (err) {
+    }
+    return null;
+  }
+
   static chatId(chatType: string, peerId: number): string {
     return `${chatType}_${peerId}`;
   }

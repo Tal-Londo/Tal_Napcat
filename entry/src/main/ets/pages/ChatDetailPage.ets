@@ -65,6 +65,8 @@ struct ChatDetailPage {
   onPageShow(): void {
     // 从 SendMessagePage 返回时重新加载 DB，拾取刚发的新占位消息
     this.loadHistorySilent();
+    // 重置未读计数
+    this.chatStore.resetUnread(this.chatId);
   }
 
   async initPage(): Promise<void> {
@@ -90,6 +92,8 @@ struct ChatDetailPage {
     });
 
     await this.loadHistory();
+    // 进入聊天时重置未读计数
+    this.chatStore.resetUnread(this.chatId);
   }
 
   async loadHistory(): Promise<void> {

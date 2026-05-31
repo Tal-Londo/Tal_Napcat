@@ -266,9 +266,21 @@ export class MessageCenter {
     let cm = MessageFormatter.toCachedMessage(msg, selfId);
     await this.chatStore.saveMessage(cm);
     let chatItem = MessageFormatter.buildChatItem(msg, selfId);
-    this.chatStore.upsertChat(chatItem);
 
+    // 未读计数：当前页面在查看时清零，否则累加
     let handler = this.chatHandlers.get(chatId);
+    if (handler !== undefined) {
+      // 用户正在查看此聊天，清零未读
+      chatItem.unreadCount = 0;
+    } else if (chatItem.unreadCount > 0) {
+      // 不在查看且非自己发的消息，累加
+      let existing = await this.chatStore.getChatByChatId(chatId);
+      if (existing !== null) {
+        chatItem.unreadCount = existing.unreadCount + 1;
+      }
+    }
+    await this.chatStore.upsertChat(chatItem);
+
     rl.log('MC-DISP', 'chatId=' + chatId + ' hasH=' + (handler !== undefined));
     if (handler !== undefined) {
       handler(msg);
