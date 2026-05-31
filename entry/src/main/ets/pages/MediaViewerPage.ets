@@ -64,6 +64,14 @@ struct MediaViewerPage {
     return new MediaItem();
   }
 
+  fixVideoUrl(url: string): string {
+    // QQ CDN 需要仿安卓客户端参数才能访问，否则 5411006
+    if (url.includes('multimedia.nt.qq.com.cn') && !url.includes('client_proto=')) {
+      return url + '&client_proto=ntv2&client_appid=537324442&client_type=android&client_ver=9.2.30&client_down_type=manual&client_aio_type=bigs';
+    }
+    return url;
+  }
+
   getCachedUrl(url: string): string {
     let key = this.cacheMgr.makeKey(url, CacheType.IMAGE);
     let cached = this.cacheMgr.getPath(key);
@@ -197,7 +205,7 @@ struct MediaViewerPage {
             .padding({ top: 4, right: 4 })
 
             Video({
-              src: this.getCurrent().url,
+              src: this.fixVideoUrl(this.getCurrent().url),
               controller: this.videoController
             })
               .autoPlay(true)
@@ -207,13 +215,13 @@ struct MediaViewerPage {
               .height('70%')
               .width('90%')
               .onStart(() => {
-                RefreshLogger.getInstance().log('VIDEO-ONSTART', 'playback started, url=' + this.getCurrent().url);
+                RefreshLogger.getInstance().log('VIDEO-ONSTART', 'url=' + this.getCurrent().url);
               })
               .onPause(() => {
-                RefreshLogger.getInstance().log('VIDEO-ONPAUSE', 'playback paused');
+                RefreshLogger.getInstance().log('VIDEO-ONPAUSE', 'paused');
               })
               .onFinish(() => {
-                RefreshLogger.getInstance().log('VIDEO-ONFINISH', 'playback finished');
+                RefreshLogger.getInstance().log('VIDEO-ONFINISH', 'finished');
               })
               .onError((event) => {
                 RefreshLogger.getInstance().log('VIDEO-ONERR', 'code=' + (event?.code ?? '?') + ' msg=' + (event?.message ?? '?') + ' url=' + this.getCurrent().url);
