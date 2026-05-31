@@ -1,5 +1,6 @@
 import { router, display } from '@kit.ArkUI';
 import { CacheManager, CacheType } from '../model/CacheManager';
+import { media } from '@kit.MediaKit';
 
 @Entry
 @Component
@@ -10,11 +11,18 @@ struct MediaViewerPage {
   @State imgScale: number = 1.0;
   @State offsetX: number = 0;
   @State offsetY: number = 0;
+  @State videoPlaying: boolean = false;
+  @State videoLoading: boolean = false;
   private baseScale: number = 1.0;
   private baseOffsetX: number = 0;
   private baseOffsetY: number = 0;
   private cacheMgr: CacheManager = CacheManager.getInstance();
   private screenW: number = 300;
+  private avPlayer: media.AVPlayer | null = null;
+
+  aboutToDisappear(): void {
+    this.stopVideo();
+  }
 
   aboutToAppear(): void {
     let params = this.getUIContext().getRouter().getParams() as Record<string, Object>;
@@ -79,6 +87,7 @@ struct MediaViewerPage {
     if (this.currentIndex < this.urls.length - 1) {
       this.currentIndex++;
       this.resetView();
+      this.resetVideo();
     }
   }
 
@@ -86,6 +95,7 @@ struct MediaViewerPage {
     if (this.currentIndex > 0) {
       this.currentIndex--;
       this.resetView();
+      this.resetVideo();
     }
   }
 
@@ -107,13 +117,79 @@ struct MediaViewerPage {
     } else {
       if (event.offsetX < -80) {
         this.swipeNext();
+        this.resetVideo();
       } else if (event.offsetX > 80) {
         this.swipePrev();
+        this.resetVideo();
       }
       this.offsetX = 0;
       this.offsetY = 0;
       this.baseOffsetX = 0;
       this.baseOffsetY = 0;
+    }
+  }
+
+  async toggleVideoPlay(): Promise<void> {
+    if (this.videoPlaying) {
+      this.stopVideo();
+      return;
+    }
+    let url = '';
+    if (this.currentIndex >= 0 && this.currentIndex < this.urls.length) {
+      url = this.urls[this.currentIndex];
+    }
+    if (url === '') {
+      return;
+    }
+    try {
+      this.videoLoading = true;
+      if (this.avPlayer !== null) {
+        await this.avPlayer.reset();
+      }
+      this.avPlayer = await media.createAVPlayer();
+      this.avPlayer.on('stateChange', (state: string) => {
+        if (state === 'playing') {
+          this.videoLoading = false;
+          this.videoPlaying = true;
+        }
+        if (state === 'stopped' || state === 'error' || state === 'completed') {
+          this.videoPlaying = false;
+        }
+      });
+      this.avPlayer.on('error', () => {
+        this.videoLoading = false;
+        this.videoPlaying = false;
+      });
+      if (url.startsWith('http')) {
+        this.avPlayer.url = url;
+      } else {
+        this.avPlayer.url = 'file://' + url;
+      }
+      await this.avPlayer.prepare();
+      await this.avPlayer.play();
+    } catch (_e) {
+      this.videoLoading = false;
+      this.videoPlaying = false;
+    }
+  }
+
+  stopVideo(): void {
+    this.videoPlaying = false;
+    this.videoLoading = false;
+    if (this.avPlayer !== null) {
+      try {
+        this.avPlayer.stop();
+        this.avPlayer.reset();
+      } catch (_e) {
+      }
+    }
+  }
+
+  resetVideo(): void {
+    this.stopVideo();
+    if (this.mediaType === 'video') {
+      this.videoLoading = false;
+      this.videoPlaying = false;
     }
   }
 
@@ -153,22 +229,55 @@ struct MediaViewerPage {
       }
 
       if (this.urls.length > 0 && this.mediaType === 'video') {
-        Column() {
-          Text('?')
-            .fontSize(48)
-            .fontColor('#888888')
-            .margin({ bottom: 12 })
-          Text('视频')
-            .fontSize(16)
-            .fontColor(Color.White)
-          Text('暂不支持播放')
-            .fontSize(11)
-            .fontColor('#666666')
-            .margin({ top: 6 })
+        Stack({ alignContent: Alignment.Center }) {
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('#000000')
+
+          if (!this.videoLoading && !this.videoPlaying) {
+            Column() {
+              SymbolGlyph($r('sys.symbol.play_circle'))
+                .fontSize(48)
+                .fontColor(['#C0B8E0'])
+                .onClick(() => { this.toggleVideoPlay(); })
+                .margin({ bottom: 8 })
+              Text('点击播放视频')
+                .fontSize(12)
+                .fontColor('#888888')
+            }
+            .width('100%')
+            .height('100%')
+            .justifyContent(FlexAlign.Center)
+          }
+
+          if (this.videoLoading) {
+            LoadingProgress()
+              .width(40)
+              .height(40)
+              .color('#C0B8E0')
+          }
+
+          if (this.videoPlaying) {
+            XComponent({ id: 'videoPlayer', type: XComponentType.SURFACE, libraryname: 'video' })
+              .width('100%')
+              .height('100%')
+              .onClick(() => { this.toggleVideoPlay(); })
+          }
+
+          // 旋转关闭
+          SymbolGlyph($r('sys.symbol.xmark_circle'))
+            .fontSize(22)
+            .fontColor([Color.White])
+            .margin({ top: 8, right: 8 })
+            .onClick(() => {
+              this.stopVideo();
+              this.close();
+            })
         }
         .width('100%')
         .height('100%')
-        .justifyContent(FlexAlign.Center)
+        .position({ x: 0, y: 0 })
       }
 
       // 页码指示器

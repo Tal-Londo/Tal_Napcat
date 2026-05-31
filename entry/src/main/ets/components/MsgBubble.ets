@@ -17,6 +17,8 @@ class MsgSegment {
   fileName: string = '';
   replyId: string = '';
   recordFile: string = '';
+  videoFile: string = '';       // video file path from data
+  videoThumb: string = '';      // video thumbnail URL from data
 }
 
 @Component
@@ -219,6 +221,11 @@ export struct MsgBubble {
           s.replyId = data['id'] as string || '';
           if (s.type === 'record') {
             s.recordFile = data['file'] as string || '';
+          }
+          if (s.type === 'video') {
+            s.videoFile = data['file'] as string || data['url'] as string || '';
+            s.videoThumb = data['thumb'] as string || '';
+            // 视频文件过大不缓存，直接流式播放
           }
         }
         result.push(s);
@@ -453,10 +460,34 @@ export struct MsgBubble {
                 .onClick(() => { this.toggleVoicePlay(seg); })
               }
               if (seg.type === 'video') {
-                Text('[视频]')
-                  .fontSize(12)
-                  .fontColor(this.isSelf() ? '#555555' : '#AAAAAA')
-                  .onClick(() => { this.openMediaViewer(seg.url || 'video_placeholder', 'video'); })
+                Column() {
+                  if (seg.videoThumb !== '') {
+                    Stack({ alignContent: Alignment.Center }) {
+                      Image(seg.videoThumb)
+                        .width(120)
+                        .height(90)
+                        .objectFit(ImageFit.Cover)
+                        .borderRadius(6)
+                      SymbolGlyph($r('sys.symbol.play_circle'))
+                        .fontSize(28)
+                        .fontColor([Color.White])
+                    }
+                    .margin({ top: 2, bottom: 2 })
+                    .onClick(() => { this.openMediaViewer(seg.videoFile || seg.url || 'video_placeholder', 'video'); })
+                  } else {
+                    Row() {
+                      SymbolGlyph($r('sys.symbol.play_circle'))
+                        .fontSize(16)
+                        .fontColor([this.isSelf() ? '#333333' : '#C0B8E0'])
+                      Text('视频消息')
+                        .fontSize(12)
+                        .fontColor(this.isSelf() ? '#333333' : '#EEEEEE')
+                        .margin({ left: 4 })
+                    }
+                    .padding({ top: 4, bottom: 4, left: 6, right: 10 })
+                    .onClick(() => { this.openMediaViewer(seg.videoFile || seg.url || 'video_placeholder', 'video'); })
+                  }
+                }
               }
               if (seg.type === 'file') {
                 Text(seg.fileName || '[文件]')

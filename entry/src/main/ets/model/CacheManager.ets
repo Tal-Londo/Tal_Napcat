@@ -10,7 +10,8 @@ const CACHE_INDEX_FILE = 'cache_index.json';
 export enum CacheType {
   AVATAR = 'avatar',
   IMAGE = 'image',
-  STICKER = 'sticker'
+  STICKER = 'sticker',
+  VIDEO = 'video'
 }
 
 class CacheEntry {
@@ -151,6 +152,10 @@ export class CacheManager {
 
   // ========== Private ==========
 
+  static skipCacheForSize(bytes: number): boolean {
+    return bytes > 10 * 1024 * 1024;
+  }
+
   private getExtension(type: CacheType): string {
     switch (type) {
       case CacheType.IMAGE:
@@ -159,6 +164,8 @@ export class CacheManager {
         return '.avt';
       case CacheType.STICKER:
         return '.stk';
+      case CacheType.VIDEO:
+        return '.vid';
       default:
         return '.dat';
     }
