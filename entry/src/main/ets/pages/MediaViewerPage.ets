@@ -2,12 +2,16 @@ import { router, display } from '@kit.ArkUI';
 import { CacheManager, CacheType } from '../model/CacheManager';
 import { media } from '@kit.MediaKit';
 
+class MediaItem {
+  url: string = '';
+  type: string = 'image';
+}
+
 @Entry
 @Component
 struct MediaViewerPage {
-  @State urls: string[] = [];
+  @State items: MediaItem[] = [];
   @State currentIndex: number = 0;
-  @State mediaType: string = 'image';
   @State imgScale: number = 1.0;
   @State offsetX: number = 0;
   @State offsetY: number = 0;
@@ -28,13 +32,30 @@ struct MediaViewerPage {
     let params = this.getUIContext().getRouter().getParams() as Record<string, Object>;
     if (params) {
       let urlsStr = params['mediaUrls'] as string || '[]';
+      let typesStr = params['mediaTypes'] as string || '[]';
       try {
-        this.urls = JSON.parse(urlsStr) as string[];
+        let urls = JSON.parse(urlsStr) as string[];
+        let types = JSON.parse(typesStr) as string[];
+        for (let i = 0; i < urls.length; i++) {
+          let mi = new MediaItem();
+          mi.url = urls[i];
+          mi.type = types[i] || 'image';
+          this.items.push(mi);
+        }
       } catch (_e) {
-        this.urls = [];
+        // fallback: old format without types
+        try {
+          let urls = JSON.parse(urlsStr) as string[];
+          for (let i = 0; i < urls.length; i++) {
+            let mi = new MediaItem();
+            mi.url = urls[i];
+            mi.type = params['mediaType'] as string || 'image';
+            this.items.push(mi);
+          }
+        } catch (_e2) {
+        }
       }
       this.currentIndex = params['currentIndex'] as number || 0;
-      this.mediaType = params['mediaType'] as string || 'image';
     }
     try {
       let defaultDisplay = display.getDefaultDisplaySync();
@@ -43,17 +64,17 @@ struct MediaViewerPage {
     }
   }
 
-  getDisplayUrl(): string {
-    if (this.currentIndex < 0 || this.currentIndex >= this.urls.length) {
-      return '';
+  getCurrent(): MediaItem {
+    if (this.currentIndex >= 0 && this.currentIndex < this.items.length) {
+      return this.items[this.currentIndex];
     }
-    let url = this.urls[this.currentIndex];
+    return new MediaItem();
+  }
+
+  getCachedUrl(url: string): string {
     let key = this.cacheMgr.makeKey(url, CacheType.IMAGE);
     let cached = this.cacheMgr.getPath(key);
-    if (cached !== '') {
-      return 'file://' + cached;
-    }
-    return url;
+    return cached !== '' ? 'file://' + cached : url;
   }
 
   resetView(): void {
@@ -67,13 +88,9 @@ struct MediaViewerPage {
 
   clampOffset(): void {
     let maxR = this.screenW * 0.55;
-    if (isNaN(maxR) || maxR <= 0) {
-      maxR = 200;
-    }
+    if (isNaN(maxR) || maxR <= 0) { maxR = 200; }
     let extra = (this.imgScale - 1) * this.screenW * 0.3;
-    if (extra < 0) {
-      extra = 0;
-    }
+    if (extra < 0) { extra = 0; }
     let bound = maxR + extra;
     let dist = Math.sqrt(this.offsetX * this.offsetX + this.offsetY * this.offsetY);
     if (dist > bound && dist > 0) {
@@ -84,18 +101,18 @@ struct MediaViewerPage {
   }
 
   swipeNext(): void {
-    if (this.currentIndex < this.urls.length - 1) {
+    this.stopVideo();
+    if (this.currentIndex < this.items.length - 1) {
       this.currentIndex++;
       this.resetView();
-      this.resetVideo();
     }
   }
 
   swipePrev(): void {
+    this.stopVideo();
     if (this.currentIndex > 0) {
       this.currentIndex--;
       this.resetView();
-      this.resetVideo();
     }
   }
 
@@ -109,18 +126,16 @@ struct MediaViewerPage {
     }
   }
 
-  handlePanEnd(event: GestureEvent): void {
-    if (this.imgScale > 1.01) {
+  handlePanEnd(event: GestureEvent, isImage: boolean): void {
+    if (isImage && this.imgScale > 1.01) {
       this.baseOffsetX = this.offsetX;
       this.baseOffsetY = this.offsetY;
       this.clampOffset();
     } else {
       if (event.offsetX < -80) {
         this.swipeNext();
-        this.resetVideo();
       } else if (event.offsetX > 80) {
         this.swipePrev();
-        this.resetVideo();
       }
       this.offsetX = 0;
       this.offsetY = 0;
@@ -134,13 +149,8 @@ struct MediaViewerPage {
       this.stopVideo();
       return;
     }
-    let url = '';
-    if (this.currentIndex >= 0 && this.currentIndex < this.urls.length) {
-      url = this.urls[this.currentIndex];
-    }
-    if (url === '') {
-      return;
-    }
+    let url = this.getCurrent().url;
+    if (url === '') { return; }
     this.videoLoading = true;
     if (this.avPlayer !== null) {
       this.avPlayer.release();
@@ -176,19 +186,8 @@ struct MediaViewerPage {
     this.videoPlaying = false;
     this.videoLoading = false;
     if (this.avPlayer !== null) {
-      try {
-        this.avPlayer.release();
-      } catch (_e) {
-      }
+      try { this.avPlayer.release(); } catch (_e) {}
       this.avPlayer = null;
-    }
-  }
-
-  resetVideo(): void {
-    this.stopVideo();
-    if (this.mediaType === 'video') {
-      this.videoLoading = false;
-      this.videoPlaying = false;
     }
   }
 
@@ -199,93 +198,101 @@ struct MediaViewerPage {
         .height('100%')
         .backgroundColor('#000000')
 
-      if (this.urls.length > 0 && this.mediaType === 'image') {
-        Image(this.getDisplayUrl())
+      if (this.items.length > 0) {
+        if (this.getCurrent().type === 'image') {
+          Column() {
+            Image(this.getCachedUrl(this.getCurrent().url))
+              .width('100%')
+              .height('92%')
+              .objectFit(ImageFit.Contain)
+              .scale({ x: this.imgScale, y: this.imgScale })
+              .translate({ x: this.offsetX, y: this.offsetY })
+              .gesture(
+                GestureGroup(GestureMode.Parallel,
+                  PinchGesture({ fingers: 2 })
+                    .onActionUpdate((event: GestureEvent) => {
+                      this.imgScale = this.baseScale * event.scale;
+                    })
+                    .onActionEnd(() => {
+                      this.baseScale = this.imgScale;
+                    }),
+                  PanGesture({ fingers: 1, direction: PanDirection.All, distance: 8 })
+                    .onActionUpdate((event: GestureEvent) => {
+                      this.offsetX = this.baseOffsetX + event.offsetX;
+                      this.offsetY = this.baseOffsetY + event.offsetY;
+                    })
+                    .onActionEnd((event: GestureEvent) => {
+                      this.handlePanEnd(event, true);
+                    })
+                )
+              )
+            Blank()
+          }
           .width('100%')
           .height('100%')
-          .objectFit(ImageFit.Contain)
-          .scale({ x: this.imgScale, y: this.imgScale })
-          .translate({ x: this.offsetX, y: this.offsetY })
-          .gesture(
-            GestureGroup(GestureMode.Parallel,
-              PinchGesture({ fingers: 2 })
-                .onActionUpdate((event: GestureEvent) => {
-                  this.imgScale = this.baseScale * event.scale;
-                })
-                .onActionEnd(() => {
-                  this.baseScale = this.imgScale;
-                }),
-              PanGesture({ fingers: 1, direction: PanDirection.All, distance: 8 })
-                .onActionUpdate((event: GestureEvent) => {
-                  this.offsetX = this.baseOffsetX + event.offsetX;
-                  this.offsetY = this.baseOffsetY + event.offsetY;
-                })
-                .onActionEnd((event: GestureEvent) => {
-                  this.handlePanEnd(event);
-                })
-            )
-          )
-      }
+        } else {
+          // video
+          Column() {
+            Row() {
+              Blank()
+              SymbolGlyph($r('sys.symbol.xmark_circle'))
+                .fontSize(16)
+                .fontColor([Color.White])
+                .onClick(() => { this.stopVideo(); this.close(); })
+            }
+            .width('100%')
+            .padding({ top: 4, right: 4 })
 
-      if (this.urls.length > 0 && this.mediaType === 'video') {
-        Column() {
-          // 顶部关闭按钮
-          Row() {
             Blank()
-            SymbolGlyph($r('sys.symbol.xmark_circle'))
-              .fontSize(18)
-              .fontColor([Color.White])
-              .onClick(() => {
-                this.stopVideo();
-                this.close();
-              })
+
+            if (this.videoLoading) {
+              LoadingProgress()
+                .width(36)
+                .height(36)
+                .color('#C0B8E0')
+            } else if (this.videoPlaying) {
+              Text('播放中')
+                .fontSize(14)
+                .fontColor('#C0B8E0')
+            } else {
+              SymbolGlyph($r('sys.symbol.play_circle'))
+                .fontSize(48)
+                .fontColor(['#C0B8E0'])
+                .onClick(() => { this.toggleVideoPlay(); })
+            }
+
+            Text(this.videoPlaying ? '点击暂停' : this.videoLoading ? '加载中...' : '点击播放')
+              .fontSize(12)
+              .fontColor('#888888')
+              .margin({ top: 12 })
+
+            Blank()
+
+            // pan for swipe between items
+            Row()
+              .width('100%')
+              .height(40)
+              .gesture(
+                PanGesture({ fingers: 1, direction: PanDirection.Horizontal, distance: 20 })
+                  .onActionEnd((event: GestureEvent) => {
+                    this.handlePanEnd(event, false);
+                  })
+              )
           }
           .width('100%')
-          .padding({ top: 6, right: 6 })
-
-          Blank()
-
-          if (this.videoLoading) {
-            LoadingProgress()
-              .width(36)
-              .height(36)
-              .color('#C0B8E0')
-          } else if (this.videoPlaying) {
-            Text('播放中')
-              .fontSize(14)
-              .fontColor('#C0B8E0')
-          } else {
-            SymbolGlyph($r('sys.symbol.play_circle'))
-              .fontSize(48)
-              .fontColor(['#C0B8E0'])
-              .onClick(() => { this.toggleVideoPlay(); })
-          }
-
-          Text(this.videoPlaying ? '点击暂停' : this.videoLoading ? '加载中...' : '点击播放视频')
-            .fontSize(12)
-            .fontColor('#888888')
-            .margin({ top: 12 })
-
-          Blank()
+          .height('100%')
+          .backgroundColor('#000000')
         }
-        .width('100%')
-        .height('100%')
-        .backgroundColor('#000000')
-        .onClick(() => {
-          if (this.videoPlaying) {
-            this.stopVideo();
-          }
-        })
       }
 
       // 页码指示器
-      if (this.urls.length > 1) {
+      if (this.items.length > 1) {
         Row() {
-          ForEach(this.urls, (_url: string, i: number) => {
+          ForEach(this.items, (item: MediaItem, i: number) => {
             Circle({ width: 5, height: 5 })
               .fill(i === this.currentIndex ? '#FFFFFF' : '#555555')
               .margin({ left: 3, right: 3 })
-          }, (_url: string, i: number) => i.toString())
+          }, (_item: MediaItem, i: number) => i.toString())
         }
         .width('100%')
         .justifyContent(FlexAlign.Center)
@@ -297,18 +304,21 @@ struct MediaViewerPage {
     .focusable(true)
     .focusOnTouch(true)
     .defaultFocus(true)
+    .groupDefaultFocus(true)
     .onDigitalCrown((e: CrownEvent) => {
-      let delta = Math.floor(e.degree * 100) / 100;
-      let newScale = Math.max(0.5, Math.min(this.imgScale - delta * 0.5, 5.0));
-      if (Math.abs(newScale - 1.0) < 0.03) {
-        newScale = 1.0;
-        this.offsetX = 0;
-        this.offsetY = 0;
-        this.baseOffsetX = 0;
-        this.baseOffsetY = 0;
+      if (this.getCurrent().type === 'image') {
+        let delta = Math.floor(e.degree * 100) / 100;
+        let newScale = Math.max(0.5, Math.min(this.imgScale - delta * 0.5, 5.0));
+        if (Math.abs(newScale - 1.0) < 0.03) {
+          newScale = 1.0;
+          this.offsetX = 0;
+          this.offsetY = 0;
+          this.baseOffsetX = 0;
+          this.baseOffsetY = 0;
+        }
+        this.imgScale = newScale;
+        this.baseScale = newScale;
       }
-      this.imgScale = newScale;
-      this.baseScale = newScale;
     })
     .onClick(() => { this.handleTap(); })
   }

@@ -95,16 +95,36 @@ export struct MsgBubble {
   }
 
   openMediaViewer(url: string, type: string): void {
-    let idx = this.allMediaUrls.indexOf(url);
-    if (idx < 0) {
-      idx = 0;
+    // allMediaUrls format: "type|url" (e.g. "image|http://..." or "video|http://...")
+    let urls: string[] = [];
+    let types: string[] = [];
+    let matchIdx = -1;
+    for (let i = 0; i < this.allMediaUrls.length; i++) {
+      let item = this.allMediaUrls[i];
+      let sep = item.indexOf('|');
+      let itemType = item.substring(0, sep);
+      let itemUrl = item.substring(sep + 1);
+      urls.push(itemUrl);
+      types.push(itemType);
+      if (matchIdx < 0 && url !== '' && itemUrl === url) {
+        matchIdx = i;
+      }
     }
-    let urlsStr = JSON.stringify(this.allMediaUrls);
+    if (matchIdx < 0) {
+      // fallback: find by current type
+      for (let i = 0; i < types.length; i++) {
+        if (types[i] === type && matchIdx < 0) {
+          matchIdx = i;
+        }
+      }
+      if (matchIdx < 0) { matchIdx = 0; }
+    }
     router.pushUrl({
       url: 'pages/MediaViewerPage',
       params: {
-        mediaUrls: urlsStr,
-        currentIndex: idx,
+        mediaUrls: JSON.stringify(urls),
+        mediaTypes: JSON.stringify(types),
+        currentIndex: matchIdx,
         mediaType: type
       }
     });
@@ -488,7 +508,7 @@ export struct MsgBubble {
                         .fontColor([Color.White])
                     }
                     .margin({ top: 2, bottom: 2 })
-                    .onClick(() => { this.openMediaViewer(seg.videoFile || seg.url || 'video_placeholder', 'video'); })
+                    .onClick(() => { this.openMediaViewer(seg.url || seg.videoFile || 'video_placeholder', 'video'); })
                   } else {
                     Row() {
                       SymbolGlyph($r('sys.symbol.play_circle'))
@@ -500,7 +520,7 @@ export struct MsgBubble {
                         .margin({ left: 4 })
                     }
                     .padding({ top: 4, bottom: 4, left: 6, right: 10 })
-                    .onClick(() => { this.openMediaViewer(seg.videoFile || seg.url || 'video_placeholder', 'video'); })
+                    .onClick(() => { this.openMediaViewer(seg.url || seg.videoFile || 'video_placeholder', 'video'); })
                   }
                 }
               }

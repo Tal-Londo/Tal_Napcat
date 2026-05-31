@@ -774,6 +774,28 @@ struct ChatDetailPage {
     });
   }
 
+  getAllMediaItems(): string[] {
+    let result: string[] = [];
+    for (let msg of this.messages) {
+      try {
+        let arr = JSON.parse(msg.content || '[]') as Object[];
+        for (let item of arr) {
+          let obj = item as Record<string, Object>;
+          let segType = obj['type'] as string || '';
+          let data = obj['data'] as Record<string, Object> || {};
+          if (segType === 'image' || segType === 'video') {
+            let url = data['url'] as string || data['file'] as string || '';
+            if (url !== '') {
+              result.push(segType + '|' + url);
+            }
+          }
+        }
+      } catch (_e) {
+      }
+    }
+    return result;
+  }
+
   getAllMediaUrls(): string[] {
     let result: string[] = [];
     for (let msg of this.messages) {
@@ -844,7 +866,7 @@ struct ChatDetailPage {
                 msg: msg,
                 selfId: this.selfId,
                 showTime: this.shouldShowTime(index),
-                allMediaUrls: this.getAllMediaUrls(),
+                allMediaUrls: this.getAllMediaItems(),
                 allMessages: this.messages,
                 groupPeerId: (this.chatType === 'group' ? this.peerId : 0),
                 onLongPress: (m: CachedMessage) => { this.showMenu(m); },
