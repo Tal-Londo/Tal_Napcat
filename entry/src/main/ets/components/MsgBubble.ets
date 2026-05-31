@@ -37,7 +37,7 @@ export struct MsgBubble {
   @State voicePlaying: boolean = false;
   @State voiceLoading: boolean = false;
   private avPlayer: media.AVPlayer | null = null;
-  private voiceDownloaded: string = '';
+  private voiceFd: number = -1;
 
   isSelf(): boolean {
     return this.msg.isSelf;
@@ -270,14 +270,13 @@ export struct MsgBubble {
       return;
     }
     if (this.voiceLoading) {
-      return; // 正在加载中，忽略重复点击
-    }
-    if (this.voiceDownloaded !== '') {
-      this.startVoicePlay(this.voiceDownloaded);
       return;
     }
-    // QQ 语音原始文件是 SILK 格式，手表不支持解码
-    // 必须通过 get_record(out_format=mp3) 转码后才能播放
+    if (this.voiceFd >= 0) {
+      // 已下载并打开了 fd，继续播放
+      this.doPlayFromFd(this.voiceFd);
+      return;
+    }
     let file = seg.recordFile;
     if (file === '') {
       RefreshLogger.getInstance().log('VOICE-NOURL', 'no recordFile');
@@ -305,15 +304,67 @@ export struct MsgBubble {
     try {
       let buf = buffer.from(b64, 'base64');
       let filePath = '/data/storage/el2/base/cache/voice_' + Date.now() + '.mp3';
+      // 先写入再重新打开，因为写入 fd 和播放 fd 需要分开（AVPlayer 独占 fd）
       let file = fileIo.openSync(filePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY);
       fileIo.writeSync(file.fd, buf.buffer);
       fileIo.closeSync(file);
       RefreshLogger.getInstance().log('VOICE-SAVED', 'size=' + buf.length + ' path=' + filePath.substring(0, 60));
-      this.voiceDownloaded = filePath;
-      this.startVoicePlay(filePath);
+      // 重新打开以获取可传给 AVPlayer 的 fd
+      let fd = fileIo.openSync(filePath, fileIo.OpenMode.READ_ONLY);
+      let fdNum = fd.fd;
+      RefreshLogger.getInstance().log('VOICE-FD', 'opened fd=' + fdNum);
+      this.voiceFd = fdNum;
+      this.doPlayFromFd(fdNum);
     } catch (e) {
       this.voiceLoading = false;
       RefreshLogger.getInstance().log('VOICE-SAVE-ERR', 'save failed: ' + (e as Error).message);
+    }
+  }
+
+  doPlayFromFd(fd: number): void {
+    RefreshLogger.getInstance().log('VOICE-PLAY', 'playing from fd=' + fd);
+    try {
+      if (this.avPlayer !== null) {
+        this.avPlayer.release();
+      }
+      media.createAVPlayer().then((player: media.AVPlayer) => {
+        this.avPlayer = player;
+        let prepared = false;
+        player.on('stateChange', (state: string) => {
+          RefreshLogger.getInstance().log('VOICE-STATE', 'state=' + state);
+          if (state === 'initialized' && !prepared) {
+            prepared = true;
+            player.prepare().then(() => {
+              RefreshLogger.getInstance().log('VOICE-PREPARED', 'prepare OK, playing');
+              player.play();
+              this.voicePlaying = true;
+              this.voiceLoading = false;
+            }).catch((err: Error) => {
+              RefreshLogger.getInstance().log('VOICE-PREP-ERR', 'prepare failed: ' + (err.message || 'unknown'));
+              this.voicePlaying = false;
+              this.voiceLoading = false;
+            });
+          }
+          if (state === 'stopped' || state === 'completed') {
+            this.voicePlaying = false;
+          }
+        });
+        player.on('error', () => {
+          RefreshLogger.getInstance().log('VOICE-ERR', 'AVPlayer error callback');
+          this.voicePlaying = false;
+          this.voiceLoading = false;
+        });
+        // AVPlayer 需要 fd:// 协议而不是 file://
+        player.url = 'fd://' + fd;
+      }).catch((err: Error) => {
+        RefreshLogger.getInstance().log('VOICE-CREATE-ERR', 'createAVPlayer failed: ' + (err.message || 'unknown'));
+        this.voicePlaying = false;
+        this.voiceLoading = false;
+      });
+    } catch (e) {
+      RefreshLogger.getInstance().log('VOICE-CATCH', 'exception: ' + (e as Error).message);
+      this.voicePlaying = false;
+      this.voiceLoading = false;
     }
   }
 
@@ -367,6 +418,17 @@ export struct MsgBubble {
       } catch (_e) {
       }
       this.avPlayer = null;
+    }
+    if (this.voiceFd >= 0) {
+      try {
+        // AVPlayer 释放了 fd 后可以关闭
+        setTimeout(() => {
+          try { fileIo.closeSync({ fd: this.voiceFd } as fileIo.File); } catch (_e) {}
+          this.voiceFd = -1;
+        }, 200);
+      } catch (_e) {
+        this.voiceFd = -1;
+      }
     }
   }
 
