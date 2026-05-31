@@ -259,7 +259,7 @@ export class MessageCenter {
       return;
     }
 
-    let chatId = msg.isGroupChat() ?
+    let chatId = ((msg.message_type || '') === 'group') ?
       'group_' + msg.group_id : 'private_' + msg.user_id;
     let selfId = this.selfId;
 

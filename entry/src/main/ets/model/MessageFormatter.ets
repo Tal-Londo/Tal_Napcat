@@ -1,6 +1,48 @@
 import { OneBotMessage } from './OneBotModel';
 import { CachedMessage, ChatItem } from './ChatStore';
 
+function isGroupChat(msg: OneBotMessage): boolean {
+  return (msg.message_type || '') === 'group';
+}
+
+function getDisplayText(msg: OneBotMessage): string {
+  if (msg.raw_message !== undefined && msg.raw_message !== '') {
+    return msg.raw_message as string;
+  }
+  if (typeof msg.message === 'string') {
+    return msg.message as string;
+  }
+  if (msg.message instanceof Array) {
+    let arr = msg.message as Object[];
+    let parts: string[] = [];
+    for (let seg of arr) {
+      let s = seg as Record<string, Object>;
+      let stype = s['type'] as string || '';
+      let sdata = s['data'] as Record<string, Object> || {};
+      if (stype === 'text' && sdata['text']) { parts.push(sdata['text'] as string); }
+      else if (stype === 'image') { parts.push('[图片]'); }
+      else if (stype === 'face') { parts.push('[表情]'); }
+      else if (stype === 'at') { parts.push('@' + (sdata['qq'] || '')); }
+      else if (stype === 'record') { parts.push('[语音]'); }
+      else if (stype === 'video') { parts.push('[视频]'); }
+      else if (stype === 'file') { parts.push('[文件]'); }
+      else if (stype === 'reply') { parts.push('[回复]'); }
+    }
+    return parts.join('');
+  }
+  return '';
+}
+
+function getSenderName(msg: OneBotMessage): string {
+  if (msg.sender.card !== '' && msg.sender.card !== undefined) {
+    return msg.sender.card as string;
+  }
+  if (msg.sender.nickname !== '' && msg.sender.nickname !== undefined) {
+    return msg.sender.nickname as string;
+  }
+  return String(msg.user_id);
+}
+
 export class MessageFormatter {
   private static selfId: number = 0;
 
@@ -30,23 +72,22 @@ export class MessageFormatter {
     if (msg.post_type === 'notice') {
       return '[系统通知]';
     }
-    let displayText = msg.getDisplayText();
+    let displayText = getDisplayText(msg);
     if (displayText.length > 30) {
       return displayText.substring(0, 30) + '...';
     }
     return displayText || '[消息]';
   }
 
-  // OneBotMessage → CachedMessage
   static toCachedMessage(msg: OneBotMessage, selfId: number): CachedMessage {
     let cm = new CachedMessage();
     cm.messageId = msg.message_id;
-    cm.chatId = msg.isGroupChat() ?
-      `group_${msg.group_id}` : `private_${msg.user_id}`;
+    cm.chatId = isGroupChat(msg) ?
+      'group_' + msg.group_id : 'private_' + msg.user_id;
     cm.userId = msg.user_id;
     cm.nickname = msg.sender.nickname || '';
     cm.content = JSON.stringify(msg.message);
-    cm.rawMessage = msg.getDisplayText();
+    cm.rawMessage = getDisplayText(msg);
     cm.msgType = MessageFormatter.getMsgType(msg);
     cm.timestamp = msg.time * 1000;
     cm.isSelf = msg.user_id === selfId;
@@ -68,11 +109,11 @@ export class MessageFormatter {
 
   static buildChatItem(msg: OneBotMessage, selfId: number): ChatItem {
     let item = new ChatItem();
-    item.chatType = msg.isGroupChat() ? 'group' : 'private';
-    item.peerId = msg.getUserOrGroupId();
+    item.chatType = isGroupChat(msg) ? 'group' : 'private';
+    let isGroup = isGroupChat(msg);
+    item.peerId = isGroup ? msg.group_id : msg.user_id;
     item.chatId = item.chatType + '_' + item.peerId;
-    item.peerName = msg.isGroupChat() ?
-      ('群' + msg.group_id) : msg.getSenderName();
+    item.peerName = isGroup ? ('群' + msg.group_id) : getSenderName(msg);
     item.lastMessage = MessageFormatter.getTextSummary(msg);
     item.lastMessageTime = msg.time * 1000;
     item.unreadCount = msg.user_id !== selfId ? 1 : 0;

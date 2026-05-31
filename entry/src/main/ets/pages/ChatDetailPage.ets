@@ -407,7 +407,7 @@ struct ChatDetailPage {
   }
 
   handleWsEvent(msg: OneBotMessage): void {
-    let msgChatId = msg.isGroupChat() ?
+    let msgChatId = ((msg.message_type || '') === 'group') ?
       'group_' + msg.group_id : 'private_' + msg.user_id;
     RefreshLogger.getInstance().log('CDP-HANDLER',
       'recv c=' + msgChatId + ' cur=' + this.chatId + ' pt=' + msg.post_type);
