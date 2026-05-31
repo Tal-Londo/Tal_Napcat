@@ -22,10 +22,8 @@ export struct MsgBubble {
   @Prop allMediaUrls: string[] = [];
   @Prop allMessages: CachedMessage[] = [];
   @Prop groupPeerId: number = 0;
-  @Prop showReplyBtn: boolean = false;
   onLongPress?: (msg: CachedMessage) => void;
   onSwipeReply?: (msg: CachedMessage) => void;
-  onReplyTap?: (msg: CachedMessage) => void;
 
   isSelf(): boolean {
     return this.msg.isSelf;
@@ -411,26 +409,6 @@ export struct MsgBubble {
       .padding({ top: 4, bottom: 4 })
       .alignItems(VerticalAlign.Top)
 
-      if (this.showReplyBtn) {
-        Row() {
-          Button('回复')
-            .fontSize(12)
-            .fontColor(Color.White)
-            .backgroundColor('#C0B8E0')
-            .height(28)
-            .borderRadius(14)
-            .padding({ left: 12, right: 12 })
-            .onClick(() => {
-              if (this.onReplyTap) {
-                this.onReplyTap(this.msg);
-              }
-            })
-        }
-        .width('100%')
-        .justifyContent(FlexAlign.Center)
-        .margin({ top: 4 })
-        .onClick(() => {})
-      }
     }
     .width('100%')
     .alignItems(this.isSelf() ? HorizontalAlign.End : HorizontalAlign.Start)
