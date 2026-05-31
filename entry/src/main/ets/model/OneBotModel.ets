@@ -40,15 +40,19 @@ export class OneBotRequest {
 
   static createSendMsg(peerId: number, messageType: string, text: string,
     echo?: string): OneBotRequest {
+    let textData: Record<string, Object> = { 'text': text };
+    let textSeg: Record<string, Object> = { 'type': 'text', 'data': textData };
+    return OneBotRequest.createSendSegments(peerId, messageType, [textSeg], echo);
+  }
+
+  static createSendSegments(peerId: number, messageType: string,
+    segments: Record<string, Object>[], echo?: string): OneBotRequest {
     let req = new OneBotRequest();
     req.action = 'send_msg';
     req.echo = echo || 'send_msg';
-    let textData: Record<string, Object> = { 'text': text };
-    let textSeg: Record<string, Object> = { 'type': 'text', 'data': textData };
-    let msgArr: Record<string, Object>[] = [textSeg];
     let params: Record<string, Object> = {
       'message_type': messageType,
-      'message': msgArr
+      'message': segments
     };
     if (messageType === 'group') {
       params['group_id'] = peerId;
@@ -56,6 +60,22 @@ export class OneBotRequest {
       params['user_id'] = peerId;
     }
     req.params = params;
+    return req;
+  }
+
+  static createSendVoice(peerId: number, messageType: string, filePath: string,
+    echo?: string): OneBotRequest {
+    let voiceData: Record<string, Object> = { 'file': filePath };
+    let voiceSeg: Record<string, Object> = { 'type': 'record', 'data': voiceData };
+    return OneBotRequest.createSendSegments(peerId, messageType, [voiceSeg], echo);
+  }
+
+  static createGetRecord(fileId: string, outFormat: string = 'mp3',
+    echo?: string): OneBotRequest {
+    let req = new OneBotRequest();
+    req.action = 'get_record';
+    req.params = { 'file': fileId, 'out_format': outFormat };
+    req.echo = echo || 'get_record';
     return req;
   }
 

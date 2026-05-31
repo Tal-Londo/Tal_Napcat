@@ -1,7 +1,11 @@
 import { CachedMessage, ChatStore, GroupMember } from '../model/ChatStore';
 import { CacheManager, CacheType } from '../model/CacheManager';
 import { FaceStore } from '../model/FaceStore';
+import { OneBotRequest } from '../model/OneBotModel';
+import { WebSocketManager } from '../model/WebSocketManager';
 import { router } from '@kit.ArkUI';
+import { media } from '@kit.MediaKit';
+import { fileIo } from '@kit.CoreFileKit';
 
 class MsgSegment {
   type: string = 'text';
@@ -12,6 +16,7 @@ class MsgSegment {
   faceId: string = '';
   fileName: string = '';
   replyId: string = '';
+  recordFile: string = '';
 }
 
 @Component
@@ -24,6 +29,9 @@ export struct MsgBubble {
   @Prop groupPeerId: number = 0;
   onLongPress?: (msg: CachedMessage) => void;
   onSwipeReply?: (msg: CachedMessage) => void;
+  @State voicePlaying: boolean = false;
+  private avPlayer: media.AVPlayer | null = null;
+  private voiceDownloaded: string = '';
 
   isSelf(): boolean {
     return this.msg.isSelf;
@@ -209,6 +217,9 @@ export struct MsgBubble {
           s.faceId = data['id'] as string || '';
           s.fileName = data['name'] as string || '';
           s.replyId = data['id'] as string || '';
+          if (s.type === 'record') {
+            s.recordFile = data['file'] as string || '';
+          }
         }
         result.push(s);
       }
@@ -218,6 +229,74 @@ export struct MsgBubble {
       result.push(seg);
     }
     return result;
+  }
+
+  toggleVoicePlay(seg: MsgSegment): void {
+    if (this.voicePlaying) {
+      this.stopVoice();
+      return;
+    }
+    if (seg.recordFile === '') {
+      return;
+    }
+    if (this.voiceDownloaded !== '') {
+      this.startVoicePlay(this.voiceDownloaded);
+      return;
+    }
+    // 调用 get_record 获取可播放的语音文件
+    let wsm = WebSocketManager.getInstance();
+    let req = OneBotRequest.createGetRecord(seg.recordFile, 'mp3');
+    wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+      let outFile = data['file'] as string || '';
+      if (outFile !== '') {
+        this.voiceDownloaded = outFile;
+        this.startVoicePlay(outFile);
+      } else {
+        let url = data['url'] as string || '';
+        if (url !== '') {
+          this.voiceDownloaded = url;
+          this.startVoicePlay(url);
+        }
+      }
+    });
+  }
+
+  async startVoicePlay(pathOrUrl: string): Promise<void> {
+    try {
+      if (this.avPlayer !== null) {
+        await this.avPlayer.reset();
+      }
+      this.avPlayer = await media.createAVPlayer();
+      this.avPlayer.on('stateChange', (state: string) => {
+        if (state === 'stopped' || state === 'error' || state === 'completed') {
+          this.voicePlaying = false;
+        }
+      });
+      this.avPlayer.on('error', () => {
+        this.voicePlaying = false;
+      });
+      if (pathOrUrl.startsWith('http')) {
+        this.avPlayer.url = pathOrUrl;
+      } else {
+        this.avPlayer.url = 'file://' + pathOrUrl;
+      }
+      await this.avPlayer.prepare();
+      await this.avPlayer.play();
+      this.voicePlaying = true;
+    } catch (_e) {
+      this.voicePlaying = false;
+    }
+  }
+
+  stopVoice(): void {
+    this.voicePlaying = false;
+    if (this.avPlayer !== null) {
+      try {
+        this.avPlayer.stop();
+        this.avPlayer.reset();
+      } catch (_e) {
+      }
+    }
   }
 
   build() {
@@ -361,9 +440,17 @@ export struct MsgBubble {
                 }
               }
               if (seg.type === 'record') {
-                Text('[语音]')
-                  .fontSize(12)
-                  .fontColor(this.isSelf() ? '#555555' : '#AAAAAA')
+                Row() {
+                  SymbolGlyph($r('sys.symbol.play_circle'))
+                    .fontSize(16)
+                    .fontColor([this.isSelf() ? '#333333' : '#C0B8E0'])
+                  Text(this.voicePlaying ? '播放中...' : '语音消息')
+                    .fontSize(12)
+                    .fontColor(this.isSelf() ? '#333333' : '#EEEEEE')
+                    .margin({ left: 4 })
+                }
+                .padding({ top: 4, bottom: 4, left: 6, right: 10 })
+                .onClick(() => { this.toggleVoicePlay(seg); })
               }
               if (seg.type === 'video') {
                 Text('[视频]')

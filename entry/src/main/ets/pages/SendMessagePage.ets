@@ -4,6 +4,9 @@ import { ChatStore, GroupMember } from '../model/ChatStore';
 import { ConfigManager } from '../model/ConfigManager';
 import { FaceStore } from '../model/FaceStore';
 import { RefreshLogger } from '../model/RefreshLogger';
+import { OneBotRequest } from '../model/OneBotModel';
+import { media } from '@kit.MediaKit';
+import { fileIo } from '@kit.CoreFileKit';
 
 class SqPlaceholder {
   key: string = '';
@@ -27,8 +30,11 @@ struct SendMessagePage {
   @State showAtPicker: boolean = false;
   @State showFacePicker: boolean = false;
   @State allFaceIds: number[] = [];
+  @State isRecording: boolean = false;
+  @State recordedFilePath: string = '';
   private placeholderMap: SqPlaceholder[] = [];
   private sqCounter: number = 0;
+  private avRecorder: media.AVRecorder | null = null;
 
   private peerId: number = 0;
   private chatType: string = 'private';
@@ -293,6 +299,64 @@ struct SendMessagePage {
     router.back();
   }
 
+  async toggleRecording(): Promise<void> {
+    if (this.isRecording) {
+      await this.stopRecording();
+    } else {
+      await this.startRecording();
+    }
+  }
+
+  async startRecording(): Promise<void> {
+    try {
+      let ctx = this.getUIContext().getHostContext() as Context;
+      let filePath = ctx.cacheDir + '/voice_' + Date.now() + '.m4a';
+
+      this.avRecorder = await media.createAVRecorder();
+      let audioConfig: media.AVRecorderProfile = {
+        audioBitrate: 48000,
+        audioChannels: 1,
+        audioCodec: media.CodecMimeType.AUDIO_AAC,
+        audioSampleRate: 16000,
+        fileFormat: media.ContainerFormatType.CFT_MPEG_4A,
+      };
+      await this.avRecorder.prepare({
+        audioSourceType: media.AudioSourceType.AUDIO_SOURCE_TYPE_MIC,
+        profile: audioConfig,
+        url: 'file://' + filePath,
+      });
+      await this.avRecorder.start();
+      this.isRecording = true;
+      this.recordedFilePath = filePath;
+    } catch (_e) {
+      this.isRecording = false;
+    }
+  }
+
+  async stopRecording(): Promise<void> {
+    this.isRecording = false;
+    if (this.avRecorder !== null) {
+      try {
+        await this.avRecorder.stop();
+        await this.avRecorder.release();
+      } catch (_e) {
+      }
+      this.avRecorder = null;
+    }
+    // 录制完成后自动发送
+    if (this.recordedFilePath !== '') {
+      this.sendVoice();
+    }
+  }
+
+  sendVoice(): void {
+    let req = OneBotRequest.createSendVoice(
+      this.peerId, this.chatType, this.recordedFilePath);
+    this.wsManager.sendRequest(req);
+    this.sent = true;
+    router.back();
+  }
+
   build() {
     Stack() {
       Column() {
@@ -469,6 +533,16 @@ struct SendMessagePage {
               .margin({ left: 6 })
               .onClick(() => { this.openAtPicker(); })
           }
+
+          Button(this.isRecording ? '⏹ 停止' : '🎤 语音')
+            .fontSize(12)
+            .fontColor(this.isRecording ? '#FF0000' : '#00CC88')
+            .backgroundColor(this.isRecording ? '#331111' : '#1a1a1a')
+            .height(30)
+            .borderRadius(15)
+            .padding({ left: 12, right: 12 })
+            .margin({ left: 6 })
+            .onClick(() => { this.toggleRecording(); })
           Blank()
         }
         .width('76%')
@@ -479,14 +553,29 @@ struct SendMessagePage {
         // ArcButton 发送
         ArcButton({
           options: new ArcButtonOptions({
-            label: '发送',
+            label: this.isRecording ? '停止录音' : '发送',
             position: ArcButtonPosition.BOTTOM_EDGE,
             styleMode: ArcButtonStyleMode.CUSTOM,
-            backgroundColor: ColorMetrics.resourceColor('#C0B8E0'),
+            backgroundColor: ColorMetrics.resourceColor(this.isRecording ? '#FF4444' : '#C0B8E0'),
             fontSize: new LengthMetrics(15, LengthUnit.FP),
-            onClick: () => { this.sendAndClose(); }
+            onClick: () => {
+              if (this.isRecording) {
+                this.toggleRecording();
+              } else {
+                this.sendAndClose();
+              }
+            }
           })
         })
+        // 录音状态指示
+        if (this.isRecording) {
+          Text('🔴 正在录音...')
+            .fontSize(12)
+            .fontColor('#FF4444')
+            .textAlign(TextAlign.Center)
+            .width('76%')
+            .padding({ bottom: 4 })
+        }
       }
       .width('100%')
       .height('100%')
