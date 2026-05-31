@@ -34,6 +34,7 @@ export struct MsgBubble {
   onLongPress?: (msg: CachedMessage) => void;
   onSwipeReply?: (msg: CachedMessage) => void;
   @State voicePlaying: boolean = false;
+  @State voiceLoading: boolean = false;
   private avPlayer: media.AVPlayer | null = null;
   private voiceDownloaded: string = '';
 
@@ -267,30 +268,26 @@ export struct MsgBubble {
       this.stopVoice();
       return;
     }
+    if (this.voiceLoading) {
+      return; // 正在加载中，忽略重复点击
+    }
     if (this.voiceDownloaded !== '') {
       this.startVoicePlay(this.voiceDownloaded);
       return;
     }
-    // 优先直接 HTTP URL
-    if (seg.url !== '' && seg.url.startsWith('http')) {
-      RefreshLogger.getInstance().log('VOICE-DIRECT', 'url=' + seg.url.substring(0, 80));
-      this.startVoicePlay(seg.url);
+    // QQ 语音原始文件是 SILK 格式，手表不支持解码
+    // 必须通过 get_record(out_format=mp3) 转码后才能播放
+    let file = seg.recordFile;
+    if (file === '') {
+      RefreshLogger.getInstance().log('VOICE-NOURL', 'no recordFile');
       return;
     }
-    if (seg.recordFile !== '' && seg.recordFile.startsWith('http')) {
-      RefreshLogger.getInstance().log('VOICE-DIRECT', 'file=' + seg.recordFile.substring(0, 80));
-      this.startVoicePlay(seg.recordFile);
-      return;
-    }
-    if (seg.recordFile === '') {
-      RefreshLogger.getInstance().log('VOICE-NOURL', 'no recordFile or URL');
-      return;
-    }
-    // 调用 get_record 获取可播放 URL
-    RefreshLogger.getInstance().log('VOICE-GETREC', 'req file=' + seg.recordFile.substring(0, 60));
+    this.voiceLoading = true;
+    RefreshLogger.getInstance().log('VOICE-GETREC', 'req file=' + file.substring(0, 60));
     let wsm = WebSocketManager.getInstance();
-    let req = OneBotRequest.createGetRecord(seg.recordFile, 'mp3');
+    let req = OneBotRequest.createGetRecord(file, 'mp3');
     wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+      this.voiceLoading = false;
       let retcode = data['retcode'] as number ?? 1;
       let url = data['url'] as string || '';
       let outFile = data['file'] as string || '';
@@ -508,7 +505,7 @@ export struct MsgBubble {
                   SymbolGlyph($r('sys.symbol.play_circle'))
                     .fontSize(18)
                     .fontColor([this.isSelf() ? '#333333' : '#C0B8E0'])
-                  Text(this.voicePlaying ? ' 播放中...' : ' 语音')
+                  Text(this.voiceLoading ? ' 加载中...' : (this.voicePlaying ? ' 播放中' : ' 语音'))
                     .fontSize(12)
                     .fontColor(this.isSelf() ? '#333333' : '#EEEEEE')
                 }
