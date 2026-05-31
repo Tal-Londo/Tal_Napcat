@@ -124,10 +124,13 @@ struct SendMessagePage {
   }
 
   async loadDraft(): Promise<void> {
+    let chatIdValue = this.chatId;
+    RefreshLogger.getInstance().log('SMP-LOAD-0', 'chatId=' + chatIdValue +
+      ' peerId=' + this.peerId + ' chatType=' + this.chatType);
     let ctx = this.getUIContext().getHostContext() as Context;
     await this.configManager.initDb(ctx);
-    let draftStr = await this.configManager.getString('draft_' + this.chatId, '');
-    RefreshLogger.getInstance().log('SMP-LOAD', 'key=draft_' + this.chatId +
+    let draftStr = await this.configManager.getString('draft_' + chatIdValue, '');
+    RefreshLogger.getInstance().log('SMP-LOAD', 'key=draft_' + chatIdValue +
       ' has=' + (draftStr !== '' && draftStr !== null) +
       ' len=' + (draftStr !== '' && draftStr !== null ? (draftStr || '').length : 0));
     if (draftStr === '' || draftStr === null) {
@@ -162,8 +165,9 @@ struct SendMessagePage {
   }
 
   async saveDraft(): Promise<void> {
+    let chatIdValue = this.chatId;
     RefreshLogger.getInstance().log('SMP-SAVE', 'start textLen=' + this.inputText.length +
-      ' sqC=' + this.sqCounter + ' pmLen=' + this.placeholderMap.length);
+      ' sqC=' + this.sqCounter + ' pmLen=' + this.placeholderMap.length + ' cid=' + chatIdValue);
     let pmArr: Record<string, Object>[] = [];
     for (let sp of this.placeholderMap) {
       let o: Record<string, Object> = { 'key': sp.key, 'segType': sp.segType,
@@ -179,7 +183,7 @@ struct SendMessagePage {
     };
     let ctx = this.getUIContext().getHostContext() as Context;
     await this.configManager.initDb(ctx);
-    let key = 'draft_' + this.chatId;
+    let key = 'draft_' + chatIdValue;
     await this.configManager.setString(key, JSON.stringify(obj));
     let verify = await this.configManager.getString(key, '');
     RefreshLogger.getInstance().log('SMP-SAVE-OK', 'wrote k=' + key + ' verLen=' +
@@ -187,10 +191,11 @@ struct SendMessagePage {
   }
 
   async clearDraft(): Promise<void> {
+    let chatIdValue = this.chatId;
     let ctx = this.getUIContext().getHostContext() as Context;
     await this.configManager.initDb(ctx);
-    await this.configManager.setString('draft_' + this.chatId, '');
-    RefreshLogger.getInstance().log('SMP-CLEAR', 'draft cleared');
+    await this.configManager.setString('draft_' + chatIdValue, '');
+    RefreshLogger.getInstance().log('SMP-CLEAR', 'draft cleared for cid=' + chatIdValue);
   }
 
   cancelReply(): void {
