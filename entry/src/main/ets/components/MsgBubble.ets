@@ -289,8 +289,9 @@ export struct MsgBubble {
     wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
       this.voiceLoading = false;
       let retcode = data['retcode'] as number ?? 1;
-      let url = data['url'] as string || '';
-      let outFile = data['file'] as string || '';
+      let inner = data['data'] as Record<string, Object> || {};
+      let url = inner['url'] as string || '';
+      let outFile = inner['file'] as string || '';
       RefreshLogger.getInstance().log('VOICE-GETREC-RSP', 'rc=' + retcode + ' url=' + url.substring(0, 80) + ' file=' + outFile.substring(0, 80));
       if (url !== '' && url.startsWith('http')) {
         this.voiceDownloaded = url;

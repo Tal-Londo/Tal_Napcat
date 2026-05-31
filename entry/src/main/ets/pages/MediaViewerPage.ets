@@ -160,8 +160,9 @@ struct MediaViewerPage {
     let wsm = WebSocketManager.getInstance();
     let req = OneBotRequest.createGetRecord(url, 'mp4');
     wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
-      let resolvedUrl = data['url'] as string || '';
-      let outFile = data['file'] as string || '';
+      let inner = data['data'] as Record<string, Object> || {};
+      let resolvedUrl = inner['url'] as string || '';
+      let outFile = inner['file'] as string || '';
       RefreshLogger.getInstance().log('VIDEO-GETREC-RSP', 'url=' + resolvedUrl.substring(0, 80) + ' file=' + outFile.substring(0, 80));
       if (resolvedUrl.startsWith('http')) {
         this.doPlayVideo(resolvedUrl);
