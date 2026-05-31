@@ -127,8 +127,8 @@ export class MessageCenter {
       if (list === undefined || list.length === 0) {
         return;
       }
-      // get_recent_contact 返回: [{peerUin, msgTime, chatType, peerName, ...}]
-      // chatType: 1=private, 2=group
+      // 保存最近联系人，暂用 API 返回的 abstract 作为预览
+      let chatRecords: ChatItem[] = [];
       for (let item of list) {
         let obj = item as Record<string, Object>;
         let chatType = parseInt(String(obj['chatType'] || '0'));
@@ -148,10 +148,77 @@ export class MessageCenter {
         chatItem.lastMessageTime = parseInt(String(obj['msgTime'] || '0')) * 1000;
         chatItem.unreadCount = parseInt(String(obj['unreadCnt'] || '0'));
         await this.chatStore.upsertChat(chatItem);
+        chatRecords.push(chatItem);
       }
       hilog.info(DOMAIN, TAG, `Recent contacts loaded: ${list.length} items`);
+
+      // 为每个聊天拉取最新一条消息，更新预览
+      let pending = chatRecords.length;
+      let doneCallback = (): void => {
+        pending--;
+        if (pending <= 0 && this.onContactsLoaded) {
+          this.onContactsLoaded();
+        }
+      };
+      for (let rec of chatRecords) {
+        try {
+          let req = OneBotRequest.createGetMsgHistory(rec.peerId, rec.chatType, undefined, 1);
+          let pendingChatId = rec.chatId;
+          this.wsManager.sendRequestWithCallback(req, (histData: Record<string, Object>) => {
+            this.updateChatPreview(pendingChatId, histData);
+            doneCallback();
+          });
+        } catch (_e) {
+          doneCallback();
+        }
+      }
     } catch (e) {
       hilog.error(DOMAIN, TAG, `handleRecentContact error: ${e}`);
+    }
+  }
+
+  private async updateChatPreview(chatId: string, data: Record<string, Object>): Promise<void> {
+    try {
+      let retcode = data['retcode'] as number ?? 1;
+      if (retcode !== 0) {
+        return;
+      }
+      let payload = data['data'] as Record<string, Object>;
+      if (payload === undefined) {
+        return;
+      }
+      let msgArr = payload['messages'] as Object[];
+      if (msgArr === undefined || msgArr.length === 0) {
+        return;
+      }
+      let last = msgArr[msgArr.length - 1] as Record<string, Object>;
+      let rawMsg = String(last['raw_message'] || '');
+      let msgTime = parseInt(String(last['time'] || '0')) * 1000;
+
+      let preview = rawMsg;
+      if (preview.length > 30) {
+        preview = preview.substring(0, 30) + '...';
+      }
+      if (preview === '') {
+        let segs = last['message'] as Object[];
+        if (segs && segs.length > 0) {
+          let first = segs[0] as Record<string, Object>;
+          let fType = first['type'] as string || '';
+          if (fType === 'image') { preview = '[图片]'; }
+          else if (fType === 'record') { preview = '[语音]'; }
+          else if (fType === 'video') { preview = '[视频]'; }
+          else if (fType === 'face') { preview = '[表情]'; }
+          else if (fType === 'file') { preview = '[文件]'; }
+        }
+      }
+
+      let chat = await this.chatStore.getChatByChatId(chatId);
+      if (chat !== null) {
+        chat.lastMessage = preview;
+        chat.lastMessageTime = msgTime;
+        await this.chatStore.upsertChat(chat);
+      }
+    } catch (_e) {
     }
   }
 
