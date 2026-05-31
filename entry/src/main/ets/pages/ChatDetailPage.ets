@@ -806,8 +806,8 @@ struct ChatDetailPage {
               result.push(segType + '|' + url);
             }
           } else if (segType === 'video') {
-            // 优先 file UUID（get_record 需要），fallback url
-            let vidUrl = data['file'] as string || data['url'] as string || '';
+            // 视频用 HTTP URL 直接播放（NapCat 不支持视频转码）
+            let vidUrl = data['url'] as string || data['file'] as string || '';
             if (vidUrl !== '') {
               result.push(segType + '|' + vidUrl);
             }

@@ -74,7 +74,7 @@ export class OneBotRequest {
     echo?: string): OneBotRequest {
     let req = new OneBotRequest();
     req.action = 'get_record';
-    req.params = { 'file_id': fileId, 'out_format': outFormat };
+    req.params = { 'file': fileId, 'out_format': outFormat };
     req.echo = echo || 'get_record';
     return req;
   }
