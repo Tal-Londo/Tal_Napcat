@@ -387,6 +387,18 @@ export struct SettingsTab {
             .onClick(() => { router.pushUrl({ url: 'pages/CrownDebugPage' }); })
         }
         .width('82%')
+
+        // 视频调试入口
+        ArcListItem() {
+          Text('视频播放调试')
+            .fontSize(14)
+            .fontColor('#4DA6FF')
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 14 })
+            .onClick(() => { router.pushUrl({ url: 'pages/VideoDebugPage' }); })
+        }
+        .width('82%')
       }
       .width('100%')
       .height('100%')
