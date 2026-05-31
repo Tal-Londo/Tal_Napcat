@@ -3,6 +3,7 @@ import { CacheManager, CacheType } from '../model/CacheManager';
 import { FaceStore } from '../model/FaceStore';
 import { OneBotRequest } from '../model/OneBotModel';
 import { stripCQCode } from '../model/MessageFormatter';
+import { RefreshLogger } from '../model/RefreshLogger';
 import { WebSocketManager } from '../model/WebSocketManager';
 import { router } from '@kit.ArkUI';
 import { media } from '@kit.MediaKit';
@@ -272,22 +273,28 @@ export struct MsgBubble {
     }
     // 优先直接 HTTP URL
     if (seg.url !== '' && seg.url.startsWith('http')) {
+      RefreshLogger.getInstance().log('VOICE-DIRECT', 'url=' + seg.url.substring(0, 80));
       this.startVoicePlay(seg.url);
       return;
     }
     if (seg.recordFile !== '' && seg.recordFile.startsWith('http')) {
+      RefreshLogger.getInstance().log('VOICE-DIRECT', 'file=' + seg.recordFile.substring(0, 80));
       this.startVoicePlay(seg.recordFile);
       return;
     }
     if (seg.recordFile === '') {
+      RefreshLogger.getInstance().log('VOICE-NOURL', 'no recordFile or URL');
       return;
     }
     // 调用 get_record 获取可播放 URL
+    RefreshLogger.getInstance().log('VOICE-GETREC', 'req file=' + seg.recordFile.substring(0, 60));
     let wsm = WebSocketManager.getInstance();
     let req = OneBotRequest.createGetRecord(seg.recordFile, 'mp3');
     wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+      let retcode = data['retcode'] as number ?? 1;
       let url = data['url'] as string || '';
       let outFile = data['file'] as string || '';
+      RefreshLogger.getInstance().log('VOICE-GETREC-RSP', 'rc=' + retcode + ' url=' + url.substring(0, 80) + ' file=' + outFile.substring(0, 80));
       if (url !== '' && url.startsWith('http')) {
         this.voiceDownloaded = url;
         this.startVoicePlay(url);
@@ -295,14 +302,16 @@ export struct MsgBubble {
         this.voiceDownloaded = outFile;
         this.startVoicePlay(outFile);
       } else if (outFile !== '') {
-        // 服务端本地路径，尝试用 file:// 协议播放
         this.voiceDownloaded = outFile;
         this.startVoicePlay(outFile);
+      } else {
+        RefreshLogger.getInstance().log('VOICE-NOPLAY', 'no valid playable URL from get_record response');
       }
     });
   }
 
   startVoicePlay(pathOrUrl: string): void {
+    RefreshLogger.getInstance().log('VOICE-PLAY', 'start url=' + pathOrUrl.substring(0, 100));
     try {
       if (this.avPlayer !== null) {
         this.avPlayer.release();
@@ -310,11 +319,13 @@ export struct MsgBubble {
       media.createAVPlayer().then((player: media.AVPlayer) => {
         this.avPlayer = player;
         player.on('stateChange', (state: string) => {
+          RefreshLogger.getInstance().log('VOICE-STATE', 'state=' + state);
           if (state === 'stopped' || state === 'completed') {
             this.voicePlaying = false;
           }
         });
         player.on('error', () => {
+          RefreshLogger.getInstance().log('VOICE-ERR', 'AVPlayer error callback');
           this.voicePlaying = false;
         });
         if (pathOrUrl.startsWith('http')) {
@@ -323,15 +334,19 @@ export struct MsgBubble {
           player.url = 'file://' + pathOrUrl;
         }
         player.prepare().then(() => {
+          RefreshLogger.getInstance().log('VOICE-PREPARED', 'prepared OK, starting play');
           player.play();
           this.voicePlaying = true;
-        }).catch(() => {
+        }).catch((err: Error) => {
+          RefreshLogger.getInstance().log('VOICE-PREP-ERR', 'prepare failed: ' + (err.message || 'unknown'));
           this.voicePlaying = false;
         });
-      }).catch(() => {
+      }).catch((err: Error) => {
+        RefreshLogger.getInstance().log('VOICE-CREATE-ERR', 'createAVPlayer failed: ' + (err.message || 'unknown'));
         this.voicePlaying = false;
       });
-    } catch (_e) {
+    } catch (e) {
+      RefreshLogger.getInstance().log('VOICE-CATCH', 'exception: ' + (e as Error).message);
       this.voicePlaying = false;
     }
   }

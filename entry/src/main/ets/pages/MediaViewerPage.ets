@@ -1,5 +1,6 @@
 import { router, display } from '@kit.ArkUI';
 import { CacheManager, CacheType } from '../model/CacheManager';
+import { RefreshLogger } from '../model/RefreshLogger';
 import { media } from '@kit.MediaKit';
 
 class MediaItem {
@@ -151,6 +152,7 @@ struct MediaViewerPage {
     }
     let url = this.getCurrent().url;
     if (url === '') { return; }
+    RefreshLogger.getInstance().log('VIDEO-PLAY', 'start url=' + url.substring(0, 100));
     this.videoLoading = true;
     if (this.avPlayer !== null) {
       this.avPlayer.release();
@@ -159,6 +161,7 @@ struct MediaViewerPage {
     media.createAVPlayer().then((player: media.AVPlayer) => {
       this.avPlayer = player;
       player.on('stateChange', (state: string) => {
+        RefreshLogger.getInstance().log('VIDEO-STATE', 'state=' + state);
         if (state === 'playing') {
           this.videoLoading = false;
           this.videoPlaying = true;
@@ -168,16 +171,20 @@ struct MediaViewerPage {
         }
       });
       player.on('error', () => {
+        RefreshLogger.getInstance().log('VIDEO-ERR', 'AVPlayer error callback');
         this.videoLoading = false;
         this.videoPlaying = false;
       });
       player.url = url.startsWith('http') ? url : ('file://' + url);
       player.prepare().then(() => {
+        RefreshLogger.getInstance().log('VIDEO-PREPARED', 'prepared OK, starting play');
         player.play();
-      }).catch(() => {
+      }).catch((err: Error) => {
+        RefreshLogger.getInstance().log('VIDEO-PREP-ERR', 'prepare failed: ' + (err.message || 'unknown'));
         this.videoLoading = false;
       });
-    }).catch(() => {
+    }).catch((err: Error) => {
+      RefreshLogger.getInstance().log('VIDEO-CREATE-ERR', 'createAVPlayer failed: ' + (err.message || 'unknown'));
       this.videoLoading = false;
     });
   }
