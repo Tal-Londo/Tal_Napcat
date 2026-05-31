@@ -3,6 +3,7 @@ import { WebSocketManager } from '../model/WebSocketManager';
 import { ChatStore, GroupMember } from '../model/ChatStore';
 import { ConfigManager } from '../model/ConfigManager';
 import { FaceStore } from '../model/FaceStore';
+import { RefreshLogger } from '../model/RefreshLogger';
 
 class SqPlaceholder {
   key: string = '';
@@ -126,6 +127,9 @@ struct SendMessagePage {
     let ctx = this.getUIContext().getHostContext() as Context;
     await this.configManager.initDb(ctx);
     let draftStr = await this.configManager.getString('draft_' + this.chatId, '');
+    RefreshLogger.getInstance().log('SMP-LOAD', 'key=draft_' + this.chatId +
+      ' has=' + (draftStr !== '' && draftStr !== null) +
+      ' len=' + (draftStr !== '' && draftStr !== null ? (draftStr || '').length : 0));
     if (draftStr === '' || draftStr === null) {
       return;
     }
@@ -150,11 +154,16 @@ struct SendMessagePage {
         this.replyMsgText = obj['replyText'] as string || '';
         this.replyMsgId = obj['replyId'] as number || 0;
       }
-    } catch (_e) {
+      RefreshLogger.getInstance().log('SMP-LOAD-OK', 'loaded text=' + (this.inputText).length +
+        ' sqC=' + this.sqCounter + ' pmLen=' + this.placeholderMap.length);
+    } catch (e) {
+      RefreshLogger.getInstance().log('SMP-LOAD-ERR', 'parse failed: ' + (e as Error).message);
     }
   }
 
   async saveDraft(): Promise<void> {
+    RefreshLogger.getInstance().log('SMP-SAVE', 'start textLen=' + this.inputText.length +
+      ' sqC=' + this.sqCounter + ' pmLen=' + this.placeholderMap.length);
     let pmArr: Record<string, Object>[] = [];
     for (let sp of this.placeholderMap) {
       let o: Record<string, Object> = { 'key': sp.key, 'segType': sp.segType,
@@ -170,13 +179,18 @@ struct SendMessagePage {
     };
     let ctx = this.getUIContext().getHostContext() as Context;
     await this.configManager.initDb(ctx);
-    await this.configManager.setString('draft_' + this.chatId, JSON.stringify(obj));
+    let key = 'draft_' + this.chatId;
+    await this.configManager.setString(key, JSON.stringify(obj));
+    let verify = await this.configManager.getString(key, '');
+    RefreshLogger.getInstance().log('SMP-SAVE-OK', 'wrote k=' + key + ' verLen=' +
+      (verify !== '' && verify !== null ? (verify || '').length : 0));
   }
 
   async clearDraft(): Promise<void> {
     let ctx = this.getUIContext().getHostContext() as Context;
     await this.configManager.initDb(ctx);
     await this.configManager.setString('draft_' + this.chatId, '');
+    RefreshLogger.getInstance().log('SMP-CLEAR', 'draft cleared');
   }
 
   cancelReply(): void {

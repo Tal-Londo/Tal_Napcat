@@ -611,9 +611,16 @@ struct ChatDetailPage {
   async copyMsgText(msg: CachedMessage): Promise<void> {
     let text = this.getMsgPlainText(msg);
     let draftKey = 'draft_' + this.chatId;
+    RefreshLogger.getInstance().log('DRAFT-0', 'start text=' + text.substring(0, 20) + ' key=' + draftKey);
+
     let ctx = this.getUIContext().getHostContext() as Context;
     await this.configManager.initDb(ctx);
+    RefreshLogger.getInstance().log('DRAFT-1', 'db inited');
+
     let existing = await this.configManager.getString(draftKey, '');
+    RefreshLogger.getInstance().log('DRAFT-2', 'read existing=' + (existing !== '' && existing !== null) +
+      ' len=' + (existing !== '' && existing !== null ? (existing || '').length : 0));
+
     let existingText = '';
     let sqCounter = 0;
     let pm = '[]';
@@ -627,15 +634,25 @@ struct ChatDetailPage {
         pm = o['pm'] as string || o['atMap'] as string || '[]';
         replyText = o['replyText'] as string || '';
         replyId = o['replyId'] as number || 0;
-      } catch (_e) {}
+        RefreshLogger.getInstance().log('DRAFT-3', 'parsed existingText=' + existingText.length +
+          ' sqC=' + sqCounter);
+      } catch (e) {
+        RefreshLogger.getInstance().log('DRAFT-3-ERR', 'parse failed: ' + (e as Error).message);
+      }
     }
     let merged = existingText !== '' ? existingText + '\n' + text : text;
+    RefreshLogger.getInstance().log('DRAFT-4', 'merged=' + merged.substring(0, 30) + '...');
+
     let obj: Record<string, Object> = {
       'text': merged, 'sqCounter': sqCounter, 'pm': pm,
       'replyText': replyText, 'replyId': replyId
     };
     await this.configManager.setString(draftKey, JSON.stringify(obj));
-    RefreshLogger.getInstance().log('DRAFT', 'append ok len=' + merged.length);
+
+    // 验证写入
+    let verify = await this.configManager.getString(draftKey, '');
+    RefreshLogger.getInstance().log('DRAFT-5', 'verify wrote=' + (verify !== '' && verify !== null) +
+      ' verifyLen=' + (verify !== '' && verify !== null ? (verify || '').length : 0));
     this.dismissMenu();
   }
 
