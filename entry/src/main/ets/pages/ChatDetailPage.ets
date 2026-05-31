@@ -1,4 +1,4 @@
-import { router, ArcButton, ArcButtonOptions, ArcButtonStyleMode, ArcButtonPosition, LengthUnit, ColorMetrics, LengthMetrics } from '@kit.ArkUI';
+import { router, ArcButton, ArcButtonOptions, ArcButtonStyleMode, ArcButtonPosition, LengthUnit, ColorMetrics, LengthMetrics, ArcList, ArcListItem } from '@kit.ArkUI';
 import { WebSocketManager } from '../model/WebSocketManager';
 import { ChatStore, CachedMessage, ChatItem, GroupMember } from '../model/ChatStore';
 import { MessageFormatter } from '../model/MessageFormatter';
@@ -8,7 +8,7 @@ import { ConfigManager } from '../model/ConfigManager';
 import { MsgBubble } from '../components/MsgBubble';
 import { FaceStore } from '../model/FaceStore';
 import { RefreshLogger } from '../model/RefreshLogger';
-import { ChatMessagesDataSource } from './model/ChatMessagesDataSource';
+
 
 class RouteParams {
   peer_id: number = 0;
@@ -25,7 +25,6 @@ struct ChatDetailPage {
   private msgCenter: MessageCenter = MessageCenter.getInstance();
   private selfId: number = 0;
   @State messages: CachedMessage[] = [];
-  messagesDataSource: ChatMessagesDataSource = new ChatMessagesDataSource([]);
   scrollScroller: Scroller = new Scroller();
 
   @State peerName: string = '';
@@ -108,9 +107,7 @@ struct ChatDetailPage {
       deduped.push(map[id]);
     }
     this.messages = deduped;
-    this.messagesDataSource.setMessages(deduped);
-    this.messagesDataSource.notifyDataReload();
-    this.loading = false;
+this.loading = false;
     this.scrollToBottom();
     this.requestArcListFocus();
 
@@ -259,8 +256,6 @@ struct ChatDetailPage {
       }
       if (updated) {
         this.messages = msgs;
-        this.messagesDataSource.setMessages(msgs);
-        this.messagesDataSource.notifyDataReload();
       }
     } catch (_e) {
     }
@@ -339,8 +334,6 @@ struct ChatDetailPage {
       if (newCount > 0) {
         newMessages.sort((a: CachedMessage, b: CachedMessage) => a.timestamp - b.timestamp);
         this.messages = newMessages;
-        this.messagesDataSource.setMessages(newMessages);
-        this.messagesDataSource.notifyDataReload();
         this.scrollToBottom();
       }
       this.inferMyRole();
@@ -440,8 +433,6 @@ struct ChatDetailPage {
     }
     let updated = [...this.messages, cm];
     this.messages = updated;
-    this.messagesDataSource.setMessages(updated);
-    this.messagesDataSource.notifyDataReload();
     RefreshLogger.getInstance().log('CDP-OK', 'msgId=' + cm.messageId + ' n=' + updated.length);
     this.scrollToBottom();
   }
@@ -467,8 +458,6 @@ struct ChatDetailPage {
       return;
     }
     this.messages = updated;
-    this.messagesDataSource.setMessages(updated);
-    this.messagesDataSource.notifyDataReload();
   }
 
   async loadHistorySilent(): Promise<void> {
@@ -495,8 +484,6 @@ struct ChatDetailPage {
       deduped.push(map[id]);
     }
     this.messages = deduped;
-    this.messagesDataSource.setMessages(deduped);
-    this.messagesDataSource.notifyDataReload();
   }
 
   requestArcListFocus(): void {
@@ -539,8 +526,6 @@ struct ChatDetailPage {
     this.chatStore.saveMessage(localMsg);
     let updated = [...this.messages, localMsg];
     this.messages = updated;
-    this.messagesDataSource.setMessages(updated);
-    this.messagesDataSource.notifyDataReload();
     this.scrollToBottom();
 
     let chatItem: ChatItem = new ChatItem();
@@ -756,10 +741,10 @@ struct ChatDetailPage {
   build() {
     Stack() {
       Column() {
-        // 消息 List
-        List({ scroller: this.scrollScroller }) {
+        // 消息 ArcList
+        ArcList({ scroller: this.scrollScroller }) {
           if (this.loading) {
-            ListItem() {
+            ArcListItem() {
               Column() {
                 LoadingProgress()
                   .width(30)
@@ -774,10 +759,11 @@ struct ChatDetailPage {
               .alignItems(HorizontalAlign.Center)
               .padding({ top: 40, bottom: 40 })
             }
+            .width('82%')
           }
 
           if (!this.loading && this.messages.length === 0) {
-            ListItem() {
+            ArcListItem() {
               Column() {
                 Text('暂无消息')
                   .fontSize(14)
@@ -791,10 +777,11 @@ struct ChatDetailPage {
               .alignItems(HorizontalAlign.Center)
               .padding({ top: 40, bottom: 40 })
             }
+            .width('82%')
           }
 
-          LazyForEach(this.messagesDataSource, (msg: CachedMessage, index: number) => {
-            ListItem() {
+          ForEach(this.messages, (msg: CachedMessage, index: number) => {
+            ArcListItem() {
               MsgBubble({
                 msg: msg,
                 selfId: this.selfId,
@@ -805,8 +792,9 @@ struct ChatDetailPage {
                 onLongPress: (m: CachedMessage) => { this.showMenu(m); }
               })
             }
-            .margin({ top: index === 0 ? 15 : 0, bottom: 15 })
-          }, (m: CachedMessage) => ChatMessagesDataSource.messageItemKey(m))
+            .width('84%')
+            .autoScale(false)
+          }, (msg: CachedMessage) => msg.messageId + '-' + msg.msgType + '-' + msg.timestamp)
         }
         .width('100%')
         .height('100%')
@@ -818,8 +806,7 @@ struct ChatDetailPage {
         .groupDefaultFocus(true)
         .id('chatArcList')
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
-        .listDirection(Axis.Vertical)
+        .space(LengthMetrics.vp(0))
         .onSizeChange((oldValue: SizeOptions, newValue: SizeOptions) => {
           let oldHeight = oldValue.height, newHeight = newValue.height;
           oldHeight = (oldHeight === undefined ? 0 : oldHeight);
