@@ -472,12 +472,20 @@ export struct MsgBubble {
           .clip(true)
           .padding({ left: 10, right: 10, top: 7, bottom: 7 })
           .gesture(
-            LongPressGesture({ repeat: false, duration: 500 })
-              .onAction(() => {
-                if (this.onLongPress) {
-                  this.onLongPress(this.msg);
-                }
-              })
+            GestureGroup(GestureMode.Parallel,
+              LongPressGesture({ repeat: false, duration: 500 })
+                .onAction(() => {
+                  if (this.onLongPress) {
+                    this.onLongPress(this.msg);
+                  }
+                }),
+              PanGesture({ direction: PanDirection.Horizontal, distance: 30 })
+                .onActionEnd((event: GestureEvent) => {
+                  if (event.offsetX < -20 && this.onSwipeReply) {
+                    this.onSwipeReply(this.msg);
+                  }
+                })
+            )
           )
 
           Text(this.getTimeStr())
@@ -487,15 +495,6 @@ export struct MsgBubble {
           }
         }
         .alignItems(this.isSelf() ? HorizontalAlign.End : HorizontalAlign.Start)
-        .gesture(
-          PanGesture({ direction: PanDirection.Horizontal, distance: 30 })
-            .onActionEnd((event: GestureEvent) => {
-              if (event.offsetX < -20 && this.onSwipeReply) {
-                this.onSwipeReply(this.msg);
-              }
-            })
-        )
-
         if (!this.isSelf()) {
           Blank()
         }
