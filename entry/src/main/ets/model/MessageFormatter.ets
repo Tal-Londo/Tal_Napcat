@@ -113,6 +113,7 @@ export class MessageFormatter {
     cm.msgType = MessageFormatter.getMsgType(msg);
     cm.timestamp = msg.time * 1000;
     cm.isSelf = msg.user_id === selfId;
+    cm.senderRole = msg.sender.role || '';
     return cm;
   }
 

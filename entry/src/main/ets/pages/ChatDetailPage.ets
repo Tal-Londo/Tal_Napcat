@@ -131,8 +131,13 @@ struct ChatDetailPage {
     this.scrollToBottom();
     this.requestArcListFocus();
 
-    // 从缓存中推断自己的角色
+    // 从缓存中推断自己的角色，补全 senderRole
     this.inferMyRole();
+    if (this.chatType === 'group') {
+      for (let m of deduped) {
+        this.fillSenderRole(m);
+      }
+    }
 
     let req: OneBotRequest = OneBotRequest.createGetMsgHistory(
       this.peerId, this.chatType, undefined, 20);
@@ -157,6 +162,16 @@ struct ChatDetailPage {
       this.wsManager.sendRequestWithCallback(groupInfoReq, (data: Record<string, Object>) => {
         this.handleGroupAllShut(data);
       });
+    }
+  }
+
+  fillSenderRole(cm: CachedMessage): void {
+    if (cm.senderRole !== '' || this.chatType !== 'group' || this.peerId <= 0) {
+      return;
+    }
+    let member = this.chatStore.getGroupMember(this.peerId, cm.userId);
+    if (member !== null && member.role !== '') {
+      cm.senderRole = member.role;
     }
   }
 
@@ -355,6 +370,7 @@ struct ChatDetailPage {
           existingIds.add(msgId);
         }
         let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
+        this.fillSenderRole(cm);
         await this.chatStore.saveMessage(cm);
         newMessages.push(cm);
         newCount++;
@@ -462,6 +478,7 @@ struct ChatDetailPage {
         return;
       }
     }
+    this.fillSenderRole(cm);
     let updated = [...this.messages, cm];
     this.messages = updated;
     this.messagesDataSource.setMessages(updated);
