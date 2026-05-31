@@ -1,4 +1,4 @@
-import { router, ArcButton, ArcButtonOptions, ArcButtonStyleMode, ArcButtonPosition, LengthUnit, ColorMetrics, LengthMetrics } from '@kit.ArkUI';
+import { ArcList, ArcListItem, LengthMetrics, router, ArcButton, ArcButtonOptions, ArcButtonStyleMode, ArcButtonPosition, LengthUnit, ColorMetrics } from '@kit.ArkUI';
 import { WebSocketManager } from '../model/WebSocketManager';
 import { ChatStore, CachedMessage, ChatItem, GroupMember } from '../model/ChatStore';
 import { MessageFormatter } from '../model/MessageFormatter';
@@ -16,9 +16,13 @@ class RouteParams {
   chat_type: string = '';
 }
 
+/**
+ * 调试页面：ArcList + ForEach + BasicDataSource 版本。
+ * 与正式 ChatDetailPage（List + LazyForEach）对比，验证两种列表组件的刷新行为差异。
+ */
 @Entry
 @Component
-struct ChatDetailPage {
+struct ChatDetailArcListPage {
   private wsManager: WebSocketManager = WebSocketManager.getInstance();
   private chatStore: ChatStore = ChatStore.getInstance();
   private configManager: ConfigManager = ConfigManager.getInstance();
@@ -73,13 +77,13 @@ struct ChatDetailPage {
       MessageFormatter.setSelfId(this.selfId);
     }
 
-    RefreshLogger.getInstance().log('CDP-INIT', 'registering handler for chatId=' + this.chatId);
+    RefreshLogger.getInstance().log('CDPA-INIT', 'registering handler for chatId=' + this.chatId);
     this.msgCenter.registerChatHandler(this.chatId, (msg: OneBotMessage) => {
-      RefreshLogger.getInstance().log('CDP-CALLBACK', 'arrow fn entered pt=' + msg.post_type);
+      RefreshLogger.getInstance().log('CDPA-CALLBACK', 'arrow fn entered pt=' + msg.post_type);
       try {
         this.handleWsEvent(msg);
       } catch (e) {
-        RefreshLogger.getInstance().log('CDP-ERR', 'handleWsEvent threw: ' + (e as Error).message);
+        RefreshLogger.getInstance().log('CDPA-ERR', 'handleWsEvent threw: ' + (e as Error).message);
       }
     });
 
@@ -114,7 +118,6 @@ struct ChatDetailPage {
     this.scrollToBottom();
     this.requestArcListFocus();
 
-    // 从缓存中推断自己的角色
     this.inferMyRole();
 
     let req: OneBotRequest = OneBotRequest.createGetMsgHistory(
@@ -123,7 +126,6 @@ struct ChatDetailPage {
       this.handleHistoryResponse(data);
     });
 
-    // 群聊：主动获取自己在群中的角色 + 成员列表
     if (this.chatType === 'group' && this.selfId > 0) {
       let roleReq = OneBotRequest.createGetGroupMemberInfo(this.peerId, this.selfId);
       this.wsManager.sendRequestWithCallback(roleReq, (data: Record<string, Object>) => {
@@ -135,7 +137,6 @@ struct ChatDetailPage {
         this.handleMemberListResponse(data);
       });
 
-      // 获取群信息以检查全员禁言
       let groupInfoReq = OneBotRequest.createGetGroupList();
       this.wsManager.sendRequestWithCallback(groupInfoReq, (data: Record<string, Object>) => {
         this.handleGroupAllShut(data);
@@ -201,17 +202,14 @@ struct ChatDetailPage {
       this.canSend = true;
       return;
     }
-    // 群主和管理员始终能发送
     if (this.myRole === 'owner' || this.myRole === 'admin') {
       this.canSend = true;
       return;
     }
-    // 全员禁言
     if (this.groupAllShut) {
       this.canSend = false;
       return;
     }
-    // 个人禁言
     let nowSec = Math.floor(Date.now() / 1000);
     if (this.shutUpUntil > 0 && this.shutUpUntil > nowSec) {
       this.canSend = false;
@@ -243,7 +241,6 @@ struct ChatDetailPage {
       }
       this.chatStore.setGroupMembers(this.peerId, members);
 
-      // 补充已有消息的 senderRole
       let msgs = [...this.messages];
       let updated = false;
       for (let i = 0; i < msgs.length; i++) {
@@ -302,7 +299,6 @@ struct ChatDetailPage {
         let senderId = parseInt(String(sender['user_id'] || '0'));
         let msgTime = parseInt(String(obj['time'] || '0')) * 1000;
 
-        // 自己发送的消息：检查是否有本地占位消息需要替换
         if (senderId === this.selfId) {
           let replaceIdx = -1;
           for (let i = 0; i < newMessages.length; i++) {
@@ -315,7 +311,6 @@ struct ChatDetailPage {
             }
           }
           if (replaceIdx >= 0) {
-            // 用真实消息替换占位消息
             let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
             newMessages[replaceIdx] = cm;
             this.chatStore.saveMessage(cm);
@@ -359,7 +354,6 @@ struct ChatDetailPage {
     cm.content = JSON.stringify(obj['message'] || []);
     cm.rawMessage = rawMsg;
 
-    // Napcat 撤回的消息特征：message 为空数组且 raw_message 为空
     let msgSegs = obj['message'] as Object[];
     if ((msgSegs === undefined || msgSegs.length === 0) && rawMsg === '') {
       cm.msgType = 'revoked';
@@ -413,7 +407,7 @@ struct ChatDetailPage {
   handleWsEvent(msg: OneBotMessage): void {
     let msgChatId = ((msg.message_type || '') === 'group') ?
       'group_' + msg.group_id : 'private_' + msg.user_id;
-    RefreshLogger.getInstance().log('CDP-HANDLER',
+    RefreshLogger.getInstance().log('CDPA-HANDLER',
       'recv c=' + msgChatId + ' cur=' + this.chatId + ' pt=' + msg.post_type);
 
     if (msg.post_type === 'notice') {
@@ -442,12 +436,11 @@ struct ChatDetailPage {
     this.messages = updated;
     this.messagesDataSource.setMessages(updated);
     this.messagesDataSource.notifyDataReload();
-    RefreshLogger.getInstance().log('CDP-OK', 'msgId=' + cm.messageId + ' n=' + updated.length);
+    RefreshLogger.getInstance().log('CDPA-OK', 'msgId=' + cm.messageId + ' n=' + updated.length);
     this.scrollToBottom();
   }
 
   onRecall(messageId: number): void {
-    // 备份：直接在本地 DB 做标记（MessageCenter 也会做，双重保障）
     this.chatStore.markRevoked(messageId);
 
     let found = false;
@@ -462,7 +455,6 @@ struct ChatDetailPage {
       }
     }
     if (!found) {
-      // 可能匹配到的消息 ID 不在内存中或是占位消息 → 重新加载
       this.loadHistorySilent();
       return;
     }
@@ -473,7 +465,6 @@ struct ChatDetailPage {
 
   async loadHistorySilent(): Promise<void> {
     let cached: CachedMessage[] = await this.chatStore.getMessages(this.chatId, 100);
-    // 按 message_id 聚合，被撤回的消息优先保留
     let map: Record<number, CachedMessage> = {};
     let order: number[] = [];
     for (let cm of cached) {
@@ -481,7 +472,6 @@ struct ChatDetailPage {
       cm.isSelf = cm.userId === this.selfId;
       let existing = map[cm.messageId];
       if (existing !== undefined) {
-        // 撤回的行优先
         if (!existing.isRevoked() && cm.isRevoked()) {
           map[cm.messageId] = cm;
         }
@@ -651,7 +641,6 @@ struct ChatDetailPage {
     };
     await this.configManager.setString(draftKey, JSON.stringify(obj));
 
-    // 验证写入
     let verify = await this.configManager.getString(draftKey, '');
     RefreshLogger.getInstance().log('DRAFT-5', 'verify wrote=' + (verify !== '' && verify !== null) +
       ' verifyLen=' + (verify !== '' && verify !== null ? (verify || '').length : 0));
@@ -659,20 +648,16 @@ struct ChatDetailPage {
   }
 
   canRecall(msg: CachedMessage): boolean {
-    // 私人聊天：只能撤回自己发的，且 2 分钟内
     if (this.chatType === 'private') {
       return msg.isSelf && (Date.now() - msg.timestamp) < 120000;
     }
-    // 群聊
     let myRole = this.myRole;
     let senderRole = msg.senderRole || 'member';
 
-    // owner 可以撤回所有人
     if (myRole === 'owner') {
       return true;
     }
 
-    // admin 不能撤回 owner 和同级 admin，可以撤回普通人和自己
     if (myRole === 'admin') {
       if (senderRole === 'owner' || senderRole === 'admin') {
         return false;
@@ -680,7 +665,6 @@ struct ChatDetailPage {
       return true;
     }
 
-    // 普通成员：只能撤回自己 2 分钟内的
     if (msg.isSelf) {
       return (Date.now() - msg.timestamp) < 120000;
     }
@@ -689,7 +673,6 @@ struct ChatDetailPage {
 
   revokeMsg(msg: CachedMessage): void {
     this.dismissMenu();
-    // 构造撤回请求
     let req = new OneBotRequest();
     req.action = 'delete_msg';
     req.params = { 'message_id': msg.messageId };
@@ -756,10 +739,10 @@ struct ChatDetailPage {
   build() {
     Stack() {
       Column() {
-        // 消息 List
-        List({ scroller: this.scrollScroller }) {
+        // 消息 ArcList（调试版本：ArcList + ForEach + BasicDataSource）
+        ArcList({ scroller: this.scrollScroller }) {
           if (this.loading) {
-            ListItem() {
+            ArcListItem() {
               Column() {
                 LoadingProgress()
                   .width(30)
@@ -774,10 +757,11 @@ struct ChatDetailPage {
               .alignItems(HorizontalAlign.Center)
               .padding({ top: 40, bottom: 40 })
             }
+            .width('82%')
           }
 
           if (!this.loading && this.messages.length === 0) {
-            ListItem() {
+            ArcListItem() {
               Column() {
                 Text('暂无消息')
                   .fontSize(14)
@@ -791,10 +775,11 @@ struct ChatDetailPage {
               .alignItems(HorizontalAlign.Center)
               .padding({ top: 40, bottom: 40 })
             }
+            .width('82%')
           }
 
-          LazyForEach(this.messagesDataSource, (msg: CachedMessage, index: number) => {
-            ListItem() {
+          ForEach(this.messages, (msg: CachedMessage, index: number) => {
+            ArcListItem() {
               MsgBubble({
                 msg: msg,
                 selfId: this.selfId,
@@ -805,8 +790,9 @@ struct ChatDetailPage {
                 onLongPress: (m: CachedMessage) => { this.showMenu(m); }
               })
             }
-            .margin({ top: index === 0 ? 15 : 0, bottom: 15 })
-          }, (m: CachedMessage) => ChatMessagesDataSource.messageItemKey(m))
+            .width('84%')
+            .autoScale(false)
+          }, (msg: CachedMessage) => ChatMessagesDataSource.messageItemKey(msg))
         }
         .width('100%')
         .height('100%')
@@ -818,17 +804,7 @@ struct ChatDetailPage {
         .groupDefaultFocus(true)
         .id('chatArcList')
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
-        .listDirection(Axis.Vertical)
-        .onSizeChange((oldValue: SizeOptions, newValue: SizeOptions) => {
-          let oldHeight = oldValue.height, newHeight = newValue.height;
-          oldHeight = (oldHeight === undefined ? 0 : oldHeight);
-          newHeight = (newHeight === undefined ? 0 : newHeight);
-          let toBeSmall = (newHeight > 0 && newHeight < oldHeight);
-          if (toBeSmall) {
-            this.scrollToBottom();
-          }
-        })
+        .space(LengthMetrics.vp(0))
         .padding({ left: 12, right: 12, top: 4, bottom: 4 })
 
         // 底部 ArcButton（被禁言时隐藏）
@@ -904,8 +880,6 @@ struct ChatDetailPage {
               .margin({ top: 6 })
               .onClick(() => { this.atMember(this.menuMsg!); })
           }
-
-          
 
           if (this.canRecall(this.menuMsg!)) {
             Button('撤回')

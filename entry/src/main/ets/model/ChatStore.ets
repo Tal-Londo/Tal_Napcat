@@ -4,7 +4,6 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 
 const TAG = 'ChatStore';
 const DOMAIN = 0x0005;
-const MAX_MESSAGES_PER_CHAT = 200;
 
 interface ChatRow {
   id: number;
@@ -407,7 +406,6 @@ export class ChatStore {
         await this.rdbStore.delete(delPred);
       }
       await this.rdbStore.insert('messages', bucket);
-      await this.trimMessages(msg.chatId);
     } catch (err) {
       hilog.error(DOMAIN, TAG, `saveMessage failed`);
     }
@@ -416,19 +414,6 @@ export class ChatStore {
   async saveMessages(msgs: CachedMessage[]): Promise<void> {
     for (let msg of msgs) {
       await this.saveMessage(msg);
-    }
-  }
-
-  private async trimMessages(chatId: string): Promise<void> {
-    if (this.rdbStore === null) {
-      return;
-    }
-    try {
-      let sql = `DELETE FROM messages WHERE chat_id = ? ` +
-        `AND id NOT IN (SELECT id FROM messages WHERE chat_id = ? ` +
-        `ORDER BY timestamp DESC LIMIT ${MAX_MESSAGES_PER_CHAT})`;
-      await this.rdbStore.executeSql(sql, [chatId, chatId]);
-    } catch (err) {
     }
   }
 
