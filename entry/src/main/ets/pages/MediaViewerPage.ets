@@ -1,7 +1,6 @@
 import { router, display } from '@kit.ArkUI';
 import { CacheManager, CacheType } from '../model/CacheManager';
 import { RefreshLogger } from '../model/RefreshLogger';
-import { media } from '@kit.MediaKit';
 
 class MediaItem {
   url: string = '';
@@ -16,18 +15,12 @@ struct MediaViewerPage {
   @State imgScale: number = 1.0;
   @State offsetX: number = 0;
   @State offsetY: number = 0;
-  @State videoPlaying: boolean = false;
-  @State videoLoading: boolean = false;
   private baseScale: number = 1.0;
   private baseOffsetX: number = 0;
   private baseOffsetY: number = 0;
   private cacheMgr: CacheManager = CacheManager.getInstance();
   private screenW: number = 300;
-  private avPlayer: media.AVPlayer | null = null;
-
-  aboutToDisappear(): void {
-    this.stopVideo();
-  }
+  private videoController: VideoController = new VideoController();
 
   aboutToAppear(): void {
     let params = this.getUIContext().getRouter().getParams() as Record<string, Object>;
@@ -44,7 +37,6 @@ struct MediaViewerPage {
           this.items.push(mi);
         }
       } catch (_e) {
-        // fallback: old format without types
         try {
           let urls = JSON.parse(urlsStr) as string[];
           for (let i = 0; i < urls.length; i++) {
@@ -102,7 +94,9 @@ struct MediaViewerPage {
   }
 
   swipeNext(): void {
-    this.stopVideo();
+    if (this.videoController !== undefined) {
+      this.videoController.stop();
+    }
     if (this.currentIndex < this.items.length - 1) {
       this.currentIndex++;
       this.resetView();
@@ -110,7 +104,9 @@ struct MediaViewerPage {
   }
 
   swipePrev(): void {
-    this.stopVideo();
+    if (this.videoController !== undefined) {
+      this.videoController.stop();
+    }
     if (this.currentIndex > 0) {
       this.currentIndex--;
       this.resetView();
@@ -118,6 +114,9 @@ struct MediaViewerPage {
   }
 
   close(): void {
+    if (this.videoController !== undefined) {
+      this.videoController.stop();
+    }
     router.back();
   }
 
@@ -142,71 +141,6 @@ struct MediaViewerPage {
       this.offsetY = 0;
       this.baseOffsetX = 0;
       this.baseOffsetY = 0;
-    }
-  }
-
-  toggleVideoPlay(): void {
-    if (this.videoPlaying) {
-      this.stopVideo();
-      return;
-    }
-    let url = this.getCurrent().url;
-    if (url === '') { return; }
-    this.videoLoading = true;
-    // NapCat 不支持视频转码 (retcode=1200)
-    // HTTP CDN URL 直接走 AVPlayer 音频流播放（手表无画面渲染）
-    RefreshLogger.getInstance().log('VIDEO-PLAY', 'audio stream from ' + url.substring(0, 80));
-    this.doPlayVideo(url);
-  }
-
-  doPlayVideo(playUrl: string): void {
-    RefreshLogger.getInstance().log('VIDEO-PLAY', 'start url=' + playUrl.substring(0, 100));
-    this.videoLoading = true;
-    if (this.avPlayer !== null) {
-      this.avPlayer.release();
-      this.avPlayer = null;
-    }
-    media.createAVPlayer().then((player: media.AVPlayer) => {
-      this.avPlayer = player;
-      let prepared = false;
-      player.on('stateChange', (state: string) => {
-        RefreshLogger.getInstance().log('VIDEO-STATE', 'state=' + state);
-        if (state === 'initialized' && !prepared) {
-          prepared = true;
-          player.prepare().then(() => {
-            RefreshLogger.getInstance().log('VIDEO-PREPARED', 'prepare OK, playing');
-            player.play();
-          }).catch((err: Error) => {
-            RefreshLogger.getInstance().log('VIDEO-PREP-ERR', 'prepare failed: ' + (err.message || 'unknown'));
-            this.videoLoading = false;
-          });
-        }
-        if (state === 'playing') {
-          this.videoLoading = false;
-          this.videoPlaying = true;
-        }
-        if (state === 'stopped' || state === 'completed') {
-          this.videoPlaying = false;
-        }
-      });
-      player.on('error', () => {
-        RefreshLogger.getInstance().log('VIDEO-ERR', 'AVPlayer error callback');
-        this.videoLoading = false;
-        this.videoPlaying = false;
-      });
-      player.url = playUrl.startsWith('http') ? playUrl : ('file://' + playUrl);
-    }).catch((err: Error) => {
-      RefreshLogger.getInstance().log('VIDEO-CREATE-ERR', 'createAVPlayer failed: ' + (err.message || 'unknown'));
-      this.videoLoading = false;
-    });
-  }
-
-  stopVideo(): void {
-    this.videoPlaying = false;
-    this.videoLoading = false;
-    if (this.avPlayer !== null) {
-      try { this.avPlayer.release(); } catch (_e) {}
-      this.avPlayer = null;
     }
   }
 
@@ -250,42 +184,28 @@ struct MediaViewerPage {
           .width('100%')
           .height('100%')
         } else {
-          // video
+          // video — use Video component (official wearable approach)
           Column() {
             Row() {
               Blank()
               SymbolGlyph($r('sys.symbol.xmark_circle'))
                 .fontSize(16)
                 .fontColor([Color.White])
-                .onClick(() => { this.stopVideo(); this.close(); })
+                .onClick(() => { this.close(); })
             }
             .width('100%')
             .padding({ top: 4, right: 4 })
 
-            Blank()
-
-            if (this.videoLoading) {
-              LoadingProgress()
-                .width(36)
-                .height(36)
-                .color('#C0B8E0')
-            } else if (this.videoPlaying) {
-              Text('播放中')
-                .fontSize(14)
-                .fontColor('#C0B8E0')
-            } else {
-              SymbolGlyph($r('sys.symbol.play_circle'))
-                .fontSize(48)
-                .fontColor(['#C0B8E0'])
-                .onClick(() => { this.toggleVideoPlay(); })
-            }
-
-            Text(this.videoPlaying ? '点击暂停' : this.videoLoading ? '加载中...' : '点击播放')
-              .fontSize(12)
-              .fontColor('#888888')
-              .margin({ top: 12 })
-
-            Blank()
+            Video({
+              src: this.getCurrent().url,
+              controller: this.videoController
+            })
+              .autoPlay(true)
+              .controls(false)
+              .loop(false)
+              .objectFit(ImageFit.Contain)
+              .height('70%')
+              .width('90%')
 
             // pan for swipe between items
             Row()
