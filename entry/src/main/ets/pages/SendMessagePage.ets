@@ -8,6 +8,7 @@ import { OneBotRequest } from '../model/OneBotModel';
 import { media } from '@kit.MediaKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
+import { abilityAccessCtrl, Permissions } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 
 class SqPlaceholder {
@@ -357,6 +358,17 @@ struct SendMessagePage {
   }
 
   async startRecording(): Promise<void> {
+    // 运行时申请麦克风权限
+    try {
+      let ctx = this.getUIContext().getHostContext() as Context;
+      let atManager = abilityAccessCtrl.createAtManager();
+      let grantStatus = await atManager.checkAccessToken(
+        ctx.applicationInfo.accessTokenId, 'ohos.permission.MICROPHONE');
+      if (grantStatus !== abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) {
+        await atManager.requestPermissionsFromUser(ctx, ['ohos.permission.MICROPHONE']);
+      }
+    } catch (_e) {
+    }
     try {
       let ctx = this.getUIContext().getHostContext() as Context;
       let filePath = ctx.cacheDir + '/voice_' + Date.now() + '.m4a';
