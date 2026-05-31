@@ -495,28 +495,38 @@ struct ChatDetailPage {
   }
 
   onRecall(messageId: number): void {
-    // 备份：直接在本地 DB 做标记（MessageCenter 也会做，双重保障）
-    this.chatStore.markRevoked(messageId);
+    // MessageCenter 已调过 markRevoked，此处只处理内存中的消息
+    this.applyRecall(messageId);
+  }
 
-    let found = false;
-    let updated = [...this.messages];
-    for (let i = 0; i < updated.length; i++) {
-      if (updated[i].messageId === messageId) {
+  applyRecall(messageId: number): void {
+    for (let i = 0; i < this.messages.length; i++) {
+      if (this.messages[i].messageId === messageId) {
+        let updated = [...this.messages];
         updated[i].msgType = 'revoked';
         updated[i].rawMessage = '消息已被撤回';
         updated[i].content = '[]';
-        found = true;
-        break;
+        this.messages = updated;
+        this.messagesDataSource.setMessages(updated);
+        this.messagesDataSource.notifyDataReload();
+        return;
       }
     }
-    if (!found) {
-      // 可能匹配到的消息 ID 不在内存中或是占位消息 → 重新加载
-      this.loadHistorySilent();
-      return;
-    }
-    this.messages = updated;
-    this.messagesDataSource.setMessages(updated);
-    this.messagesDataSource.notifyDataReload();
+    // 未在内存中找到：可能 handleHistoryResponse 还在合并中，延迟重试
+    setTimeout(() => {
+      for (let i = 0; i < this.messages.length; i++) {
+        if (this.messages[i].messageId === messageId) {
+          let updated = [...this.messages];
+          updated[i].msgType = 'revoked';
+          updated[i].rawMessage = '消息已被撤回';
+          updated[i].content = '[]';
+          this.messages = updated;
+          this.messagesDataSource.setMessages(updated);
+          this.messagesDataSource.notifyDataReload();
+          return;
+        }
+      }
+    }, 800);
   }
 
   async loadHistorySilent(): Promise<void> {
