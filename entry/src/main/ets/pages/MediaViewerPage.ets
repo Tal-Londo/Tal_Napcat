@@ -154,27 +154,28 @@ struct MediaViewerPage {
     }
     let url = this.getCurrent().url;
     if (url === '') { return; }
-    // UUID 格式（非 HTTP URL）需要先调 get_record 解析为真实 URL
-    if (!url.startsWith('http') && !url.startsWith('/')) {
-      RefreshLogger.getInstance().log('VIDEO-GETREC', 'resolving UUID: ' + url.substring(0, 60));
-      let wsm = WebSocketManager.getInstance();
-      let req = OneBotRequest.createGetRecord(url, 'mp4');
-      wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
-        let resolvedUrl = data['url'] as string || '';
-        let outFile = data['file'] as string || '';
-        RefreshLogger.getInstance().log('VIDEO-GETREC-RSP', 'url=' + resolvedUrl.substring(0, 80) + ' file=' + outFile.substring(0, 80));
-        if (resolvedUrl !== '') {
-          this.doPlayVideo(resolvedUrl);
-        } else if (outFile !== '') {
-          this.doPlayVideo(outFile);
-        } else {
-          RefreshLogger.getInstance().log('VIDEO-NOPLAY', 'get_record returned no playable URL');
-          this.videoLoading = false;
-        }
-      });
-      return;
-    }
-    this.doPlayVideo(url);
+    this.videoLoading = true;
+    // 一律通过 get_record 获取可播放格式（Napcat 会转码）
+    RefreshLogger.getInstance().log('VIDEO-GETREC', 'resolving: ' + url.substring(0, 80));
+    let wsm = WebSocketManager.getInstance();
+    let req = OneBotRequest.createGetRecord(url, 'mp4');
+    wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+      let resolvedUrl = data['url'] as string || '';
+      let outFile = data['file'] as string || '';
+      RefreshLogger.getInstance().log('VIDEO-GETREC-RSP', 'url=' + resolvedUrl.substring(0, 80) + ' file=' + outFile.substring(0, 80));
+      if (resolvedUrl.startsWith('http')) {
+        this.doPlayVideo(resolvedUrl);
+      } else if (outFile.startsWith('http')) {
+        this.doPlayVideo(outFile);
+      } else if (url.startsWith('http')) {
+        // 如果 get_record 没返回 HTTP URL 但原始 URL 就是 HTTP，fallback
+        RefreshLogger.getInstance().log('VIDEO-FALLBACK', 'get_record no URL, using original');
+        this.doPlayVideo(url);
+      } else {
+        RefreshLogger.getInstance().log('VIDEO-NOPLAY', 'get_record returned no playable URL');
+        this.videoLoading = false;
+      }
+    });
   }
 
   doPlayVideo(playUrl: string): void {
