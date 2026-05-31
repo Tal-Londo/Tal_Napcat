@@ -268,9 +268,9 @@ export class MessageCenter {
     let chatItem = MessageFormatter.buildChatItem(msg, selfId);
     this.chatStore.upsertChat(chatItem);
 
-    rl.log('MC-DISP', 'chatId=' + chatId + ' hasH=' + this.chatHandlers.has(chatId));
     let handler = this.chatHandlers.get(chatId);
-    if (handler) {
+    rl.log('MC-DISP', 'chatId=' + chatId + ' hasH=' + (handler !== undefined));
+    if (handler !== undefined) {
       handler(msg);
     }
 

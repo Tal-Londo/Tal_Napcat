@@ -35,7 +35,7 @@ struct SendMessagePage {
   private peerName: string = '';
   private sent: boolean = false;
 
-  get chatId(): string {
+  getChatId(): string {
     return ChatStore.chatId(this.chatType, this.peerId);
   }
 
@@ -124,7 +124,7 @@ struct SendMessagePage {
   }
 
   async loadDraft(): Promise<void> {
-    let chatIdValue = this.chatId;
+    let chatIdValue = this.getChatId();
     RefreshLogger.getInstance().log('SMP-LOAD-0', 'chatId=' + chatIdValue +
       ' peerId=' + this.peerId + ' chatType=' + this.chatType);
     let ctx = this.getUIContext().getHostContext() as Context;
@@ -165,7 +165,7 @@ struct SendMessagePage {
   }
 
   async saveDraft(): Promise<void> {
-    let chatIdValue = this.chatId;
+    let chatIdValue = this.getChatId();
     RefreshLogger.getInstance().log('SMP-SAVE', 'start textLen=' + this.inputText.length +
       ' sqC=' + this.sqCounter + ' pmLen=' + this.placeholderMap.length + ' cid=' + chatIdValue);
     let pmArr: Record<string, Object>[] = [];
@@ -191,7 +191,7 @@ struct SendMessagePage {
   }
 
   async clearDraft(): Promise<void> {
-    let chatIdValue = this.chatId;
+    let chatIdValue = this.getChatId();
     let ctx = this.getUIContext().getHostContext() as Context;
     await this.configManager.initDb(ctx);
     await this.configManager.setString('draft_' + chatIdValue, '');
