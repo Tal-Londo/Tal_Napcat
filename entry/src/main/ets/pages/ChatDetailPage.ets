@@ -124,6 +124,13 @@ struct ChatDetailPage {
       }
     }
     deduped.sort((a, b) => a.timestamp - b.timestamp);
+    // 补齐占位消息的 userId/nickname（旧版可能存 userId=0）
+    for (let m of deduped) {
+      if (m.isSelf && m.userId === 0) {
+        m.userId = this.selfId;
+        m.nickname = '我';
+      }
+    }
     this.messages = deduped;
     this.messagesDataSource.setMessages(deduped);
     this.messagesDataSource.notifyDataReload();

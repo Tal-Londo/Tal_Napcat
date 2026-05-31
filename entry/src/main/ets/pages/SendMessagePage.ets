@@ -330,11 +330,14 @@ struct SendMessagePage {
     }
 
     let ctx = this.getUIContext().getHostContext() as Context;
+    await this.configManager.initDb(ctx);
+    let selfId = parseInt(await this.configManager.getString('self_id', '0') || '0');
+
     let cm = new CachedMessage();
     cm.messageId = -Date.now(); // 唯一负 ID，后续 handleHistoryResponse 替换
     cm.chatId = chatId;
-    cm.userId = 0; // selfId 在 SendMessagePage 拿不到，填 0 后 loadHistory 补 isSelf
-    cm.nickname = '';
+    cm.userId = selfId;
+    cm.nickname = '我';
     cm.content = JSON.stringify(segments);
     cm.rawMessage = rawText;
     cm.msgType = firstType;
