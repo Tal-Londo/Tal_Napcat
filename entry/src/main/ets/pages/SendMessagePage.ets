@@ -352,24 +352,30 @@ struct SendMessagePage {
             .width('100%')
             .padding({ bottom: 6 })
 
-            ForEach(this.memberList.slice(0, 8), (member: GroupMember) => {
-              Row() {
-                Text(member.getDisplayName())
-                  .fontSize(13)
-                  .fontColor(Color.White)
-                  .layoutWeight(1)
-                  .maxLines(1)
-                Text(member.userId.toString())
-                  .fontSize(10)
-                  .fontColor('#666666')
-              }
-              .width('100%')
-              .padding({ top: 6, bottom: 6 })
-              .onClick(() => { this.pickAtMember(member); })
-            }, (member: GroupMember) => member.userId.toString())
+            List() {
+              ForEach(this.memberList, (member: GroupMember) => {
+                ListItem() {
+                  Row() {
+                    Text(member.getDisplayName())
+                      .fontSize(13)
+                      .fontColor(Color.White)
+                      .layoutWeight(1)
+                      .maxLines(1)
+                    Text(member.userId.toString())
+                      .fontSize(10)
+                      .fontColor('#666666')
+                  }
+                  .width('100%')
+                  .padding({ top: 6, bottom: 6 })
+                  .onClick(() => { this.pickAtMember(member); })
+                }
+              }, (member: GroupMember) => member.userId.toString())
+            }
+            .width('100%')
+            .height(150)
+            .scrollBar(BarState.Off)
           }
           .width('76%')
-          .constraintSize({ maxHeight: 200 })
           .backgroundColor('#1a1a1a')
           .borderRadius(12)
           .padding(10)
@@ -398,7 +404,7 @@ struct SendMessagePage {
             .padding({ bottom: 6 })
 
             Grid() {
-              ForEach(this.allFaceIds.slice(0, 24), (fid: number) => {
+              ForEach(this.allFaceIds, (fid: number) => {
                 GridItem() {
                   Image($rawfile('face/' + fid + '.png'))
                     .width(22)
@@ -414,6 +420,8 @@ struct SendMessagePage {
             .rowsGap(6)
             .columnsGap(4)
             .width('100%')
+            .height(160)
+            .scrollBar(BarState.Off)
           }
           .width('76%')
           .backgroundColor('#1a1a1a')
