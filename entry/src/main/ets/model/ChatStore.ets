@@ -358,7 +358,7 @@ export class ChatStore {
     try {
       let predicates = new relationalStore.RdbPredicates('messages');
       predicates.equalTo('chat_id', chatId);
-      predicates.orderByAsc('timestamp');
+      predicates.orderByDesc('timestamp');
       predicates.limitAs(limit);
       let rs = await this.rdbStore.query(predicates);
       while (rs.goToNextRow()) {
@@ -377,6 +377,7 @@ export class ChatStore {
         result.push(CachedMessage.fromRow(row));
       }
       rs.close();
+      result.reverse();
     } catch (err) {
       hilog.error(DOMAIN, TAG, `getMessages failed`);
     }

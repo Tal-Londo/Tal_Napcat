@@ -267,7 +267,7 @@ struct ChatDetailPage {
     }
   }
 
-  handleHistoryResponse(data: Record<string, Object>): void {
+  async handleHistoryResponse(data: Record<string, Object>): Promise<void> {
     try {
       let retcode = data['retcode'] as number ?? 1;
       if (retcode !== 0) {
@@ -319,7 +319,7 @@ struct ChatDetailPage {
             // 用真实消息替换占位消息
             let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
             newMessages[replaceIdx] = cm;
-            this.chatStore.saveMessage(cm);
+            await this.chatStore.saveMessage(cm);
             if (msgId > 0) {
               existingIds.add(msgId);
             }
@@ -332,7 +332,7 @@ struct ChatDetailPage {
           existingIds.add(msgId);
         }
         let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
-        this.chatStore.saveMessage(cm);
+        await this.chatStore.saveMessage(cm);
         newMessages.push(cm);
         newCount++;
       }
@@ -515,7 +515,7 @@ struct ChatDetailPage {
     }, 100);
   }
 
-  sendText(text: string): void {
+  async sendText(text: string): Promise<void> {
     if (text.trim() === '') {
       return;
     }
@@ -537,7 +537,7 @@ struct ChatDetailPage {
     localMsg.timestamp = Date.now();
     localMsg.isSelf = true;
 
-    this.chatStore.saveMessage(localMsg);
+    await this.chatStore.saveMessage(localMsg);
     let updated = [...this.messages, localMsg];
     this.messages = updated;
     this.messagesDataSource.setMessages(updated);

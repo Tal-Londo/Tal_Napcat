@@ -235,18 +235,18 @@ export class MessageCenter {
     }
   }
 
-  private onWsMessage(msg: OneBotMessage): void {
+  private async onWsMessage(msg: OneBotMessage): Promise<void> {
     let rl = RefreshLogger.getInstance();
     rl.log('MC', 'pt=' + msg.post_type + ' nt=' + (msg.notice_type||'') + ' mt=' + msg.message_type);
 
     try {
-      this.processMessage(msg);
+      await this.processMessage(msg);
     } catch (e) {
       rl.log('MC-ERR', 'processMessage threw: ' + (e as Error).message);
     }
   }
 
-  private processMessage(msg: OneBotMessage): void {
+  private async processMessage(msg: OneBotMessage): Promise<void> {
     let rl = RefreshLogger.getInstance();
 
     if (msg.post_type === 'notice') {
@@ -264,7 +264,7 @@ export class MessageCenter {
     let selfId = this.selfId;
 
     let cm = MessageFormatter.toCachedMessage(msg, selfId);
-    this.chatStore.saveMessage(cm);
+    await this.chatStore.saveMessage(cm);
     let chatItem = MessageFormatter.buildChatItem(msg, selfId);
     this.chatStore.upsertChat(chatItem);
 
