@@ -3,7 +3,10 @@ import { CacheManager, CacheType } from '../model/CacheManager';
 import { RefreshLogger } from '../model/RefreshLogger';
 import { OneBotRequest } from '../model/OneBotModel';
 import { WebSocketManager } from '../model/WebSocketManager';
+import { ConfigManager } from '../model/ConfigManager';
 import { media } from '@kit.MediaKit';
+import { http } from '@kit.NetworkKit';
+import { fileIo } from '@kit.CoreFileKit';
 
 class MediaItem {
   url: string = '';
@@ -155,11 +158,17 @@ struct MediaViewerPage {
     let url = this.getCurrent().url;
     if (url === '') { return; }
     this.videoLoading = true;
-    // 一律通过 get_record 获取可播放格式（Napcat 会转码）
-    RefreshLogger.getInstance().log('VIDEO-GETREC', 'resolving: ' + url.substring(0, 80));
+    if (url.startsWith('http')) {
+      // 直接 HTTP URL — 手表 AVPlayer 播放音频流（无画面）
+      RefreshLogger.getInstance().log('VIDEO-DIRECT', 'play audio from ' + url.substring(0, 80));
+      this.doPlayVideo(url);
+      return;
+    }
+    // UUID — 走 get_record 获取转码 URL/路径
+    RefreshLogger.getInstance().log('VIDEO-GETREC', 'resolving UUID: ' + url.substring(0, 80));
     let wsm = WebSocketManager.getInstance();
     let req = OneBotRequest.createGetRecord(url, 'mp4');
-    wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+    wsm.sendRequestWithCallback(req, async (data: Record<string, Object>) => {
       let inner = data['data'] as Record<string, Object> || {};
       let resolvedUrl = inner['url'] as string || '';
       let outFile = inner['file'] as string || '';
@@ -168,15 +177,44 @@ struct MediaViewerPage {
         this.doPlayVideo(resolvedUrl);
       } else if (outFile.startsWith('http')) {
         this.doPlayVideo(outFile);
-      } else if (url.startsWith('http')) {
-        // 如果 get_record 没返回 HTTP URL 但原始 URL 就是 HTTP，fallback
-        RefreshLogger.getInstance().log('VIDEO-FALLBACK', 'get_record no URL, using original');
-        this.doPlayVideo(url);
+      } else if (outFile !== '') {
+        await this.downloadAndPlayVideo(outFile);
       } else {
-        RefreshLogger.getInstance().log('VIDEO-NOPLAY', 'get_record returned no playable URL');
+        RefreshLogger.getInstance().log('VIDEO-NOPLAY', 'no playable URL');
         this.videoLoading = false;
       }
     });
+  }
+
+  async downloadAndPlayVideo(serverPath: string): Promise<void> {
+    try {
+      let serverUrl = await ConfigManager.getInstance().getString('server_url', '');
+      let base = serverUrl.replace(/^ws/, 'http').replace(/\/ws(\?.*)?$/, '');
+      let downloadUrl = base + serverPath;
+      RefreshLogger.getInstance().log('VIDEO-DOWNLOAD', 'download: ' + downloadUrl.substring(0, 100));
+      let httpReq = http.createHttp();
+      let resp = await httpReq.request(downloadUrl, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        connectTimeout: 10000,
+        readTimeout: 60000
+      });
+      let filePath = '/data/storage/el2/base/cache/video_' + Date.now() + '.mp4';
+      if (resp.result instanceof ArrayBuffer && (resp.result as ArrayBuffer).byteLength > 0) {
+        let file = fileIo.openSync(filePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY);
+        fileIo.writeSync(file.fd, resp.result as ArrayBuffer);
+        fileIo.closeSync(file);
+        RefreshLogger.getInstance().log('VIDEO-DOWN-OK', 'saved size=' + (resp.result as ArrayBuffer).byteLength);
+        this.doPlayVideo(filePath);
+      } else {
+        RefreshLogger.getInstance().log('VIDEO-DOWN-ERR', 'empty response');
+        this.videoLoading = false;
+        httpReq.destroy();
+      }
+    } catch (e) {
+      RefreshLogger.getInstance().log('VIDEO-DOWN-CATCH', 'error: ' + (e as Error).message);
+      this.videoLoading = false;
+    }
   }
 
   doPlayVideo(playUrl: string): void {

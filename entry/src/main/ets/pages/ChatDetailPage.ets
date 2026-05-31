@@ -800,10 +800,16 @@ struct ChatDetailPage {
           let obj = item as Record<string, Object>;
           let segType = obj['type'] as string || '';
           let data = obj['data'] as Record<string, Object> || {};
-          if (segType === 'image' || segType === 'video') {
+          if (segType === 'image') {
             let url = data['url'] as string || data['file'] as string || '';
             if (url !== '') {
               result.push(segType + '|' + url);
+            }
+          } else if (segType === 'video') {
+            // 优先 file UUID（get_record 需要），fallback url
+            let vidUrl = data['file'] as string || data['url'] as string || '';
+            if (vidUrl !== '') {
+              result.push(segType + '|' + vidUrl);
             }
           }
         }

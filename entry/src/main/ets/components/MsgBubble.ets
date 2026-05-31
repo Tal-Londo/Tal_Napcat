@@ -8,6 +8,8 @@ import { WebSocketManager } from '../model/WebSocketManager';
 import { router } from '@kit.ArkUI';
 import { media } from '@kit.MediaKit';
 import { fileIo } from '@kit.CoreFileKit';
+import { http } from '@kit.NetworkKit';
+import { ConfigManager } from '../model/ConfigManager';
 
 class MsgSegment {
   type: string = 'text';
@@ -286,7 +288,7 @@ export struct MsgBubble {
     RefreshLogger.getInstance().log('VOICE-GETREC', 'req file=' + file.substring(0, 60));
     let wsm = WebSocketManager.getInstance();
     let req = OneBotRequest.createGetRecord(file, 'mp3');
-    wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+    wsm.sendRequestWithCallback(req, async (data: Record<string, Object>) => {
       this.voiceLoading = false;
       let retcode = data['retcode'] as number ?? 1;
       let inner = data['data'] as Record<string, Object> || {};
@@ -296,14 +298,14 @@ export struct MsgBubble {
       if (url !== '' && url.startsWith('http')) {
         this.voiceDownloaded = url;
         this.startVoicePlay(url);
-      } else if (outFile !== '' && outFile.startsWith('http')) {
+      } else if (outFile.startsWith('http')) {
         this.voiceDownloaded = outFile;
         this.startVoicePlay(outFile);
       } else if (outFile !== '') {
-        this.voiceDownloaded = outFile;
-        this.startVoicePlay(outFile);
+        // 服务端本地路径 → 通过 NapCat HTTP 服务器下载后再播放
+        await this.downloadAndPlayVoice(outFile);
       } else {
-        RefreshLogger.getInstance().log('VOICE-NOPLAY', 'no valid playable URL from get_record response');
+        RefreshLogger.getInstance().log('VOICE-NOPLAY', 'no valid URL from get_record');
       }
     });
   }
@@ -347,6 +349,41 @@ export struct MsgBubble {
     } catch (e) {
       RefreshLogger.getInstance().log('VOICE-CATCH', 'exception: ' + (e as Error).message);
       this.voicePlaying = false;
+    }
+  }
+
+  async downloadAndPlayVoice(serverPath: string): Promise<void> {
+    try {
+      let serverUrl = await ConfigManager.getInstance().getString('server_url', '');
+      // ws://server:3005/ws → http://server:3005
+      let base = serverUrl.replace(/^ws/, 'http').replace(/\/ws(\?.*)?$/, '');
+      if (base === '') {
+        RefreshLogger.getInstance().log('VOICE-DOWN-ERR', 'no server URL');
+        return;
+      }
+      let downloadUrl = base + serverPath;
+      RefreshLogger.getInstance().log('VOICE-DOWNLOAD', 'download: ' + downloadUrl.substring(0, 100));
+      let httpReq = http.createHttp();
+      let resp = await httpReq.request(downloadUrl, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        connectTimeout: 10000,
+        readTimeout: 30000
+      });
+      let filePath = '/data/storage/el2/base/cache/voice_' + Date.now() + '.mp3';
+      if (resp.result instanceof ArrayBuffer && (resp.result as ArrayBuffer).byteLength > 0) {
+        let file = fileIo.openSync(filePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY);
+        fileIo.writeSync(file.fd, resp.result as ArrayBuffer);
+        fileIo.closeSync(file);
+        RefreshLogger.getInstance().log('VOICE-DOWN-OK', 'saved size=' + (resp.result as ArrayBuffer).byteLength);
+        this.voiceDownloaded = filePath;
+        this.startVoicePlay(filePath);
+      } else {
+        RefreshLogger.getInstance().log('VOICE-DOWN-ERR', 'empty response');
+        httpReq.destroy();
+      }
+    } catch (e) {
+      RefreshLogger.getInstance().log('VOICE-DOWN-CATCH', 'error: ' + (e as Error).message);
     }
   }
 
