@@ -215,8 +215,8 @@ struct MediaViewerPage {
               .onFinish(() => {
                 RefreshLogger.getInstance().log('VIDEO-ONFINISH', 'playback finished');
               })
-              .onError(() => {
-                RefreshLogger.getInstance().log('VIDEO-ONERR', 'Video component error, url=' + this.getCurrent().url.substring(0, 80));
+              .onError((event) => {
+                RefreshLogger.getInstance().log('VIDEO-ONERR', 'code=' + (event?.code ?? '?') + ' msg=' + (event?.message ?? '?') + ' url=' + this.getCurrent().url.substring(0, 60));
               })
               .onPrepared((event) => {
                 RefreshLogger.getInstance().log('VIDEO-ONPREPARED', 'duration=' + event?.duration + ' url=' + this.getCurrent().url.substring(0, 80));
