@@ -35,6 +35,11 @@ struct HomePage {
     };
   }
 
+  onPageShow(): void {
+    // 从子页面返回时刷新，用于未读清零后更新列表
+    this.refreshTrigger++;
+  }
+
   getStateColor(): string {
     switch (this.wsState) {
       case WsState.CONNECTED:
