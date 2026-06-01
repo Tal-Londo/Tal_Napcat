@@ -4,6 +4,11 @@ import { promptAction } from '@kit.ArkUI';
 import { WebSocketManager, WsLogEntry, WsEventType } from '../model/WebSocketManager';
 import { ChatStore } from '../model/ChatStore';
 import { WsState } from '../model/OneBotModel';
+import { notificationManager } from '@kit.NotificationKit';
+import { wantAgent } from '@kit.AbilityKit';
+import EntryAbility from '../entryability/EntryAbility';
+import { RefreshLogger } from '../model/RefreshLogger';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 @CustomDialog
 struct UploadIpDialog {
@@ -359,6 +364,38 @@ struct DebugPage {
           }
           .width('100%')
           .justifyContent(FlexAlign.Center)
+          .margin({ bottom: 4 })
+
+          Row() {
+            Button('请求通知权限')
+              .fontSize(12)
+              .fontColor('#FFB347')
+              .backgroundColor('#2a2a2a')
+              .width(80)
+              .height(32)
+              .borderRadius(10)
+              .margin({ right: 4 })
+              .onClick(() => { this.testRequestNotification(); })
+            Button('测试通知')
+              .fontSize(12)
+              .fontColor('#C0B8E0')
+              .backgroundColor('#2a2a2a')
+              .width(70)
+              .height(32)
+              .borderRadius(10)
+              .margin({ right: 4 })
+              .onClick(() => { this.testSendNotification(); })
+            Button('启动后台任务')
+              .fontSize(12)
+              .fontColor('#00FF88')
+              .backgroundColor('#2a2a2a')
+              .width(80)
+              .height(32)
+              .borderRadius(10)
+              .onClick(() => { this.testStartBgTask(); })
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.Center)
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)
@@ -524,6 +561,82 @@ struct DebugPage {
         promptAction.showToast({ message: 'DB已收到响应' });
       }
     });
+  }
+
+  async testRequestNotification(): Promise<void> {
+    let rl = RefreshLogger.getInstance();
+    try {
+      rl.log('DEBUG-NOTIFY', 'requesting notification permission');
+      let enabled = await notificationManager.isNotificationEnabled();
+      rl.log('DEBUG-NOTIFY-CHK', 'before=' + enabled);
+      if (!enabled) {
+        await notificationManager.requestEnableNotification();
+        enabled = await notificationManager.isNotificationEnabled();
+        rl.log('DEBUG-NOTIFY-REQ', 'after=' + enabled);
+      }
+      promptAction.showToast({ message: '通知状态: ' + (enabled ? '已开启' : '已拒绝') });
+    } catch (e) {
+      let err = e as BusinessError;
+      rl.log('DEBUG-NOTIFY-ERR', 'code=' + err.code + ' msg=' + err.message);
+      promptAction.showToast({ message: '失败: ' + err.message });
+    }
+  }
+
+  async testSendNotification(): Promise<void> {
+    let rl = RefreshLogger.getInstance();
+    try {
+      rl.log('DEBUG-SEND', 'sending test notification');
+      let ctx = EntryAbility.context;
+      if (ctx === null) {
+        rl.log('DEBUG-SEND-CTX', 'no context');
+        promptAction.showToast({ message: '无上下文，等待初始化' });
+        return;
+      }
+      let wAgent = await wantAgent.getWantAgent({
+        wants: [{
+          bundleName: ctx.abilityInfo.bundleName,
+          abilityName: ctx.abilityInfo.name
+        }],
+        operationType: wantAgent.OperationType.START_ABILITY,
+        requestCode: 9999,
+        wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+      });
+
+      let request: notificationManager.NotificationRequest = {
+        id: Date.now(),
+        content: {
+          notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+          normal: {
+            title: 'NapcatWatch 通知测试',
+            text: '这是一条测试通知 ' + new Date().toTimeString()
+          }
+        },
+        notificationSlotType: notificationManager.SlotType.SOCIAL_COMMUNICATION,
+        wantAgent: wAgent,
+        deliveryTime: Date.now(),
+        isFloatingIcon: true,
+        tapDismissed: true
+      };
+      await notificationManager.publish(request);
+      rl.log('DEBUG-SEND-OK', 'notification published');
+      promptAction.showToast({ message: '通知已发送' });
+    } catch (e) {
+      let err = e as BusinessError;
+      rl.log('DEBUG-SEND-ERR', 'code=' + err.code + ' msg=' + err.message);
+      promptAction.showToast({ message: '失败: ' + err.message });
+    }
+  }
+
+  async testStartBgTask(): Promise<void> {
+    let rl = RefreshLogger.getInstance();
+    let ctx = EntryAbility.context;
+    if (ctx === null) {
+      rl.log('DEBUG-BG-CTX', 'no context');
+      promptAction.showToast({ message: '无上下文，等待初始化' });
+      return;
+    }
+    rl.log('DEBUG-BG', 'testing background task start, context ok');
+    promptAction.showToast({ message: '切到后台观察 BG 日志' });
   }
 
   hexToRgba(hex: string, alpha: number): string {

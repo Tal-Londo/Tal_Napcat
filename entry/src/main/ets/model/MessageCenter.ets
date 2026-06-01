@@ -5,6 +5,10 @@ import { OneBotMessage, OneBotRequest, WsState } from './OneBotModel';
 import { ConfigManager } from './ConfigManager';
 import { RefreshLogger } from './RefreshLogger';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { notificationManager } from '@kit.NotificationKit';
+import { wantAgent } from '@kit.AbilityKit';
+import EntryAbility from '../entryability/EntryAbility';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 const TAG = 'MessageCenter';
 const DOMAIN = 0x0007;
@@ -353,8 +357,69 @@ export class MessageCenter {
       handler(msg);
     }
 
+    // 不在聊天页面且不是自己发的消息 → 推送通知
+    if (handler === undefined && chatItem.unreadCount > 0) {
+      this.publishNotification(chatItem, cm);
+    }
+
     for (let h of this.globalHandlers) {
       h(msg);
+    }
+  }
+
+  private async publishNotification(chatItem: ChatItem, cm: CachedMessage): Promise<void> {
+    let rl = RefreshLogger.getInstance();
+    try {
+      rl.log('MC-NOTIFY', 'publishing for ' + chatItem.chatId);
+      let isEnabled = await notificationManager.isNotificationEnabled();
+      rl.log('MC-NOTIFY-CHK', 'enabled=' + isEnabled);
+      if (!isEnabled) {
+        return;
+      }
+      let chatName = chatItem.peerName || chatItem.chatId;
+      let msgPreview = cm.rawMessage || '[消息]';
+      if (msgPreview.length > 30) { msgPreview = msgPreview.substring(0, 30) + '...'; }
+
+      let ctx = EntryAbility.context;
+      if (ctx === null) {
+        rl.log('MC-NOTIFY-CTX', 'no context');
+        return;
+      }
+      let wAgent = await wantAgent.getWantAgent({
+        wants: [{
+          bundleName: ctx.abilityInfo.bundleName,
+          abilityName: ctx.abilityInfo.name,
+          parameters: {
+            peer_id: chatItem.peerId,
+            peer_name: chatItem.peerName,
+            chat_type: chatItem.chatType
+          }
+        }],
+        operationType: wantAgent.OperationType.START_ABILITY,
+        requestCode: chatItem.peerId,
+        wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+      });
+
+      let request: notificationManager.NotificationRequest = {
+        id: chatItem.peerId,
+        content: {
+          notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+          normal: {
+            title: chatName,
+            text: msgPreview
+          }
+        },
+        notificationSlotType: notificationManager.SlotType.SOCIAL_COMMUNICATION,
+        wantAgent: wAgent,
+        deliveryTime: Date.now(),
+        isFloatingIcon: true,
+        tapDismissed: true
+      };
+      await notificationManager.publish(request);
+      rl.log('MC-NOTIFY-OK', 'published: ' + chatName + ' ' + msgPreview);
+    } catch (e) {
+      let err = e as BusinessError;
+      rl.log('MC-NOTIFY-ERR', 'code=' + err.code + ' msg=' + err.message);
     }
   }
 

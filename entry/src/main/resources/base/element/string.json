@@ -155,6 +155,14 @@
     {
       "name": "microphone_permission_reason",
       "value": "用于录制语音消息"
+    },
+    {
+      "name": "background_permission_reason",
+      "value": "用于在后台保持连接以接收消息通知"
+    },
+    {
+      "name": "notification_permission_reason",
+      "value": "用于推送新消息通知"
     }
   ]
 }
