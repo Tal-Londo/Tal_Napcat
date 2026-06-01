@@ -806,10 +806,10 @@ struct ChatDetailPage {
               result.push(segType + '|' + url);
             }
           } else if (segType === 'video') {
-            // 视频用 HTTP URL 直接播放（NapCat 不支持视频转码）
-            let vidUrl = data['url'] as string || data['file'] as string || '';
-            if (vidUrl !== '') {
-              result.push(segType + '|' + vidUrl);
+            let vUrl = data['url'] as string || data['file'] as string || '';
+            let vFile = data['file'] as string || '';
+            if (vUrl !== '') {
+              result.push(segType + '|' + vUrl + '|' + vFile);
             }
           }
         }

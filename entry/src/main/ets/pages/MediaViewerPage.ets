@@ -1,6 +1,8 @@
 import { router, display } from '@kit.ArkUI';
 import { CacheManager, CacheType } from '../model/CacheManager';
 import { RefreshLogger } from '../model/RefreshLogger';
+import { OneBotRequest } from '../model/OneBotModel';
+import { WebSocketManager } from '../model/WebSocketManager';
 
 class MediaItem {
   url: string = '';
@@ -32,17 +34,27 @@ struct MediaViewerPage {
         let types = JSON.parse(typesStr) as string[];
         for (let i = 0; i < urls.length; i++) {
           let mi = new MediaItem();
-          mi.url = urls[i];
           mi.type = types[i] || 'image';
-          this.items.push(mi);
+          if (mi.type === 'video') {
+            let parts = urls[i].split('|');
+            mi.url = parts[0];
+            let fileUuid = parts[1] || '';
+            this.items.push(mi);
+            if (fileUuid !== '') {
+              this.refreshVideoUrl(mi, fileUuid);
+            }
+          } else {
+            mi.url = urls[i];
+            this.items.push(mi);
+          }
         }
       } catch (_e) {
         try {
           let urls = JSON.parse(urlsStr) as string[];
           for (let i = 0; i < urls.length; i++) {
             let mi = new MediaItem();
-            mi.url = urls[i];
             mi.type = params['mediaType'] as string || 'image';
+            mi.url = urls[i];
             this.items.push(mi);
           }
         } catch (_e2) {
@@ -55,6 +67,20 @@ struct MediaViewerPage {
       this.screenW = defaultDisplay.width;
     } catch (_e) {
     }
+  }
+
+  refreshVideoUrl(item: MediaItem, fileUuid: string): void {
+    RefreshLogger.getInstance().log('VIDEO-REFRESH', 'calling get_file for ' + fileUuid);
+    let wsm = WebSocketManager.getInstance();
+    let req = OneBotRequest.createGetFile(fileUuid);
+    wsm.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+      let inner = data['data'] as Record<string, Object> || {};
+      let newUrl = inner['url'] as string || '';
+      if (newUrl !== '') {
+        RefreshLogger.getInstance().log('VIDEO-FRESH-OK', 'new URL len=' + newUrl.length);
+        item.url = newUrl;
+      }
+    });
   }
 
   getCurrent(): MediaItem {

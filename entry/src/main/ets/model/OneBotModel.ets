@@ -79,6 +79,14 @@ export class OneBotRequest {
     return req;
   }
 
+  static createGetFile(fileId: string, echo?: string): OneBotRequest {
+    let req = new OneBotRequest();
+    req.action = 'get_file';
+    req.params = { 'file': fileId };
+    req.echo = echo || 'get_file';
+    return req;
+  }
+
   static createGetLoginInfo(echo?: string): OneBotRequest {
     let req = new OneBotRequest();
     req.action = 'get_login_info';
