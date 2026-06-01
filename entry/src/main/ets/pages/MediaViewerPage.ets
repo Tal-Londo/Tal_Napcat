@@ -14,6 +14,7 @@ class MediaItem {
 struct MediaViewerPage {
   @State items: MediaItem[] = [];
   @State currentIndex: number = 0;
+  @State videoLoading: boolean = false;
   @State imgScale: number = 1.0;
   @State offsetX: number = 0;
   @State offsetY: number = 0;
@@ -61,6 +62,9 @@ struct MediaViewerPage {
         }
       }
       this.currentIndex = params['currentIndex'] as number || 0;
+      if (this.getCurrent().type === 'video') {
+        this.videoLoading = true;
+      }
     }
     try {
       let defaultDisplay = display.getDefaultDisplaySync();
@@ -230,36 +234,49 @@ struct MediaViewerPage {
             .width('100%')
             .padding({ top: 4, right: 4 })
 
-            Video({
-              src: this.fixVideoUrl(this.getCurrent().url),
-              controller: this.videoController
-            })
-              .autoPlay(true)
-              .controls(false)
-              .loop(false)
-              .objectFit(ImageFit.Contain)
-              .height('70%')
-              .width('90%')
-              .onStart(() => {
-                RefreshLogger.getInstance().log('VIDEO-ONSTART', 'url=' + this.getCurrent().url);
+            Stack({ alignContent: Alignment.Center }) {
+              Video({
+                src: this.fixVideoUrl(this.getCurrent().url),
+                controller: this.videoController
               })
-              .onPause(() => {
-                RefreshLogger.getInstance().log('VIDEO-ONPAUSE', 'paused');
-              })
-              .onFinish(() => {
-                RefreshLogger.getInstance().log('VIDEO-ONFINISH', 'finished');
-              })
-              .onError((event) => {
-                RefreshLogger.getInstance().log('VIDEO-ONERR', 'code=' + (event?.code ?? '?') + ' msg=' + (event?.message ?? '?') + ' url=' + this.getCurrent().url);
-              })
-              .onPrepared((event) => {
-                RefreshLogger.getInstance().log('VIDEO-ONPREPARED', 'duration=' + event?.duration + ' url=' + this.getCurrent().url);
-              })
-              .onUpdate((event) => {
-                if (event?.time !== undefined) {
-                  RefreshLogger.getInstance().log('VIDEO-TIME', 'time=' + event.time);
-                }
-              })
+                .autoPlay(true)
+                .controls(false)
+                .loop(false)
+                .objectFit(ImageFit.Contain)
+                .height('70%')
+                .width('90%')
+                .onStart(() => {
+                  this.videoLoading = false;
+                  RefreshLogger.getInstance().log('VIDEO-ONSTART', 'url=' + this.getCurrent().url);
+                })
+                .onPause(() => {
+                  RefreshLogger.getInstance().log('VIDEO-ONPAUSE', 'paused');
+                })
+                .onFinish(() => {
+                  RefreshLogger.getInstance().log('VIDEO-ONFINISH', 'finished');
+                })
+                .onError((event) => {
+                  this.videoLoading = false;
+                  RefreshLogger.getInstance().log('VIDEO-ONERR', 'code=' + (event?.code ?? '?') + ' msg=' + (event?.message ?? '?') + ' url=' + this.getCurrent().url);
+                })
+                .onPrepared((event) => {
+                  RefreshLogger.getInstance().log('VIDEO-ONPREPARED', 'duration=' + event?.duration + ' url=' + this.getCurrent().url);
+                })
+                .onUpdate((event) => {
+                  if (event?.time !== undefined) {
+                    RefreshLogger.getInstance().log('VIDEO-TIME', 'time=' + event.time);
+                  }
+                })
+
+              if (this.videoLoading) {
+                LoadingProgress()
+                  .width(40)
+                  .height(40)
+                  .color('#C0B8E0')
+              }
+            }
+            .width('100%')
+            .height('70%')
 
             // pan for swipe between items
             Row()
