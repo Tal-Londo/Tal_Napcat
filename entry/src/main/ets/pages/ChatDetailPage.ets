@@ -149,6 +149,7 @@ struct ChatDetailPage {
     this.messages = deduped;
     this.messagesDataSource.setMessages(deduped);
     this.messagesDataSource.notifyDataReload();
+    this.requestArcListFocus();
     this.loading = false;
     this.scrollToBottom();
     this.requestArcListFocus();
@@ -315,6 +316,7 @@ struct ChatDetailPage {
         this.messages = msgs;
         this.messagesDataSource.setMessages(msgs);
         this.messagesDataSource.notifyDataReload();
+    this.requestArcListFocus();
       }
     } catch (_e) {
     }
@@ -405,6 +407,7 @@ struct ChatDetailPage {
         this.messages = newMessages;
         this.messagesDataSource.setMessages(newMessages);
         this.messagesDataSource.notifyDataReload();
+    this.requestArcListFocus();
         this.scrollToBottom();
       }
       this.inferMyRole();
@@ -507,6 +510,7 @@ struct ChatDetailPage {
     this.messages = updated;
     this.messagesDataSource.setMessages(updated);
     this.messagesDataSource.notifyDataReload();
+    this.requestArcListFocus();
     RefreshLogger.getInstance().log('CDP-OK', 'msgId=' + cm.messageId + ' n=' + updated.length);
     this.scrollToBottom();
   }
@@ -526,6 +530,7 @@ struct ChatDetailPage {
         this.messages = updated;
         this.messagesDataSource.setMessages(updated);
         this.messagesDataSource.notifyDataReload();
+    this.requestArcListFocus();
         return;
       }
     }
@@ -540,6 +545,7 @@ struct ChatDetailPage {
           this.messages = updated;
           this.messagesDataSource.setMessages(updated);
           this.messagesDataSource.notifyDataReload();
+    this.requestArcListFocus();
           return;
         }
       }
@@ -588,6 +594,7 @@ struct ChatDetailPage {
     this.messages = deduped;
     this.messagesDataSource.setMessages(deduped);
     this.messagesDataSource.notifyDataReload();
+    this.requestArcListFocus();
   }
 
   requestArcListFocus(): void {
@@ -634,6 +641,7 @@ struct ChatDetailPage {
     this.messages = updated;
     this.messagesDataSource.setMessages(updated);
     this.messagesDataSource.notifyDataReload();
+    this.requestArcListFocus();
     this.scrollToBottom();
 
     let chatItem: ChatItem = new ChatItem();
@@ -657,6 +665,7 @@ struct ChatDetailPage {
             this.messages = updated;
             this.messagesDataSource.setMessages(updated);
             this.messagesDataSource.notifyDataReload();
+    this.requestArcListFocus();
             // 更新 DB
             await this.chatStore.deleteMessageByMsgId(placeholderId);
             let saved = CachedMessage.fromMsg(updated[i]);
