@@ -98,14 +98,18 @@ struct ChatDetailPage {
 
   async loadHistory(): Promise<void> {
     let cached: CachedMessage[] = await this.chatStore.getMessages(this.chatId, 100);
-    // 占位消息用 index 追踪，真实消息用 messageId 去重
+    // 清理：Napcat 不推送自己发的消息，占位消息在服务端回执后被替换
+    // 所有负 messageId 的占位消息如果没有对应的服务端消息就保留
     let deduped: CachedMessage[] = [];
     let seenIds: Set<number> = new Set();
+    let selfTexts: Record<string, number> = {}; // rawMessage -> index of real self-sent msg
+    let placeholderIndexes: number[] = [];
+
+    // 第一遍：收集服务端下发的自己发送的消息
     for (let cm of cached) {
       cm.isSelf = cm.userId === this.selfId;
       if (cm.messageId > 0) {
         if (seenIds.has(cm.messageId)) {
-          // 已存在的，被撤回的优先
           for (let i = 0; i < deduped.length; i++) {
             if (deduped[i].messageId === cm.messageId) {
               if (!deduped[i].isRevoked() && cm.isRevoked()) {
@@ -117,20 +121,31 @@ struct ChatDetailPage {
         } else {
           seenIds.add(cm.messageId);
           deduped.push(cm);
+          if (cm.isSelf && cm.msgType === 'text' && cm.rawMessage !== '') {
+            selfTexts[cm.rawMessage] = deduped.length - 1;
+          }
         }
-      } else {
-        // 占位消息直接追加
-        deduped.push(cm);
       }
+    }
+
+    // 第二遍：处理占位消息
+    for (let cm of cached) {
+      if (cm.messageId > 0) { continue; }
+      cm.isSelf = cm.userId === this.selfId;
+      // 补齐旧版占位的 userId/nickname
+      if (cm.isSelf && cm.userId === 0) {
+        cm.userId = this.selfId;
+        cm.nickname = '我';
+      }
+      // 如果服务端已经有相同内容的真实消息，删除占位
+      let realIdx = selfTexts[cm.rawMessage];
+      if (realIdx !== undefined) {
+        // 服务端消息已存在 → 跳过占位
+        continue;
+      }
+      deduped.push(cm);
     }
     deduped.sort((a, b) => a.timestamp - b.timestamp);
-    // 补齐占位消息的 userId/nickname（旧版可能存 userId=0）
-    for (let m of deduped) {
-      if (m.isSelf && m.userId === 0) {
-        m.userId = this.selfId;
-        m.nickname = '我';
-      }
-    }
     this.messages = deduped;
     this.messagesDataSource.setMessages(deduped);
     this.messagesDataSource.notifyDataReload();
@@ -341,36 +356,38 @@ struct ChatDetailPage {
         let senderId = parseInt(String(sender['user_id'] || '0'));
         let msgTime = parseInt(String(obj['time'] || '0')) * 1000;
 
-        // 自己发送的消息：检查是否有本地占位消息需要替换
+        // 自己发送的消息：删除内容相同的占位消息，用服务端数据替换
         if (senderId === this.selfId) {
-          let cmType = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime).msgType;
-          let replaceIdx = -1;
-          for (let i = 0; i < newMessages.length; i++) {
-            let m = newMessages[i];
+          let filtered: CachedMessage[] = [];
+          let replaced = false;
+          for (let m of newMessages) {
             if (m.messageId < 0 && m.isSelf &&
-              m.msgType === cmType &&
-              Math.abs(m.timestamp - msgTime) < 60000) {
-              // 文本消息额外校验内容一致性
-              if (cmType === 'text' && m.rawMessage !== rawMsg) {
-                continue;
-              }
-              replaceIdx = i;
-              break;
+                m.msgType === 'text' && m.rawMessage === rawMsg) {
+              await this.chatStore.deleteMessageByMsgId(m.messageId);
+              replaced = true;
+            } else {
+              filtered.push(m);
             }
           }
-          if (replaceIdx >= 0) {
-            // 用真实消息替换占位消息
+          if (replaced) {
+            // 用服务端真实消息替换
             let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
-            // 删除旧占位消息（负 messageId）
-            await this.chatStore.deleteMessageByMsgId(newMessages[replaceIdx].messageId);
-            newMessages[replaceIdx] = cm;
+            filtered.push(cm);
             await this.chatStore.saveMessage(cm);
             if (msgId > 0) {
               existingIds.add(msgId);
             }
+            newMessages = filtered;
             newCount++;
-            continue;
+          } else if (msgId > 0 && !existingIds.has(msgId)) {
+            // 没有匹配的占位（可能是旧数据或重复拉取），直接追加
+            existingIds.add(msgId);
+            let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
+            await this.chatStore.saveMessage(cm);
+            newMessages.push(cm);
+            newCount++;
           }
+          continue;
         }
 
         if (msgId > 0) {
@@ -533,6 +550,8 @@ struct ChatDetailPage {
     let cached: CachedMessage[] = await this.chatStore.getMessages(this.chatId, 100);
     let deduped: CachedMessage[] = [];
     let seenIds: Set<number> = new Set();
+    let selfTexts: Record<string, number> = {};
+
     for (let cm of cached) {
       cm.isSelf = cm.userId === this.selfId;
       if (cm.messageId > 0) {
@@ -548,10 +567,22 @@ struct ChatDetailPage {
         } else {
           seenIds.add(cm.messageId);
           deduped.push(cm);
+          if (cm.isSelf && cm.msgType === 'text' && cm.rawMessage !== '') {
+            selfTexts[cm.rawMessage] = deduped.length - 1;
+          }
         }
-      } else {
-        deduped.push(cm);
       }
+    }
+
+    for (let cm of cached) {
+      if (cm.messageId > 0) { continue; }
+      cm.isSelf = cm.userId === this.selfId;
+      if (cm.isSelf && cm.userId === 0) {
+        cm.userId = this.selfId;
+        cm.nickname = '我';
+      }
+      if (selfTexts[cm.rawMessage] !== undefined) { continue; }
+      deduped.push(cm);
     }
     deduped.sort((a, b) => a.timestamp - b.timestamp);
     this.messages = deduped;
@@ -580,10 +611,11 @@ struct ChatDetailPage {
     }
     let req: OneBotRequest = OneBotRequest.createSendMsg(
       this.peerId, this.chatType, text);
-    this.wsManager.sendRequest(req);
+    let sentEcho = req.echo;
 
+    // 创建占位消息
     let localMsg: CachedMessage = new CachedMessage();
-    localMsg.messageId = -1;
+    localMsg.messageId = -Date.now();
     localMsg.chatId = this.chatId;
     localMsg.userId = this.selfId;
     localMsg.nickname = '我';
@@ -595,8 +627,9 @@ struct ChatDetailPage {
     localMsg.msgType = 'text';
     localMsg.timestamp = Date.now();
     localMsg.isSelf = true;
-
     await this.chatStore.saveMessage(localMsg);
+    let placeholderId = localMsg.messageId;
+
     let updated = [...this.messages, localMsg];
     this.messages = updated;
     this.messagesDataSource.setMessages(updated);
@@ -611,6 +644,29 @@ struct ChatDetailPage {
     chatItem.lastMessage = text.length > 30 ? text.substring(0, 30) : text;
     chatItem.lastMessageTime = Date.now();
     this.chatStore.upsertChat(chatItem);
+
+    // 发送并等待服务端确认 message_id
+    this.wsManager.sendRequestWithCallback(req, async (data: Record<string, Object>) => {
+      let serverMsgId = parseInt(String((data['data'] as Record<string, Object> || {})['message_id'] || '0'));
+      if (serverMsgId > 0) {
+        // 用服务端 message_id 更新占位消息
+        for (let i = 0; i < this.messages.length; i++) {
+          if (this.messages[i].messageId === placeholderId) {
+            let updated = [...this.messages];
+            updated[i].messageId = serverMsgId;
+            this.messages = updated;
+            this.messagesDataSource.setMessages(updated);
+            this.messagesDataSource.notifyDataReload();
+            // 更新 DB
+            await this.chatStore.deleteMessageByMsgId(placeholderId);
+            let saved = CachedMessage.fromMsg(updated[i]);
+            saved.messageId = serverMsgId;
+            await this.chatStore.saveMessage(saved);
+            break;
+          }
+        }
+      }
+    });
   }
 
   shouldShowTime(currentIndex: number): boolean {
