@@ -338,6 +338,22 @@ export class MessageCenter {
     await this.chatStore.saveMessage(cm);
     let chatItem = MessageFormatter.buildChatItem(msg, selfId);
 
+    // 群聊补全群名（优先现存 chatItem，其次 groups 缓存，最后 '群+ID'）
+    if (chatItem.chatType === 'group' && (!chatItem.peerName || chatItem.peerName.startsWith('群'))) {
+      let existing = await this.chatStore.getChatByChatId(chatId);
+      if (existing !== null && existing.peerName !== '' && !existing.peerName.startsWith('群')) {
+        chatItem.peerName = existing.peerName;
+      } else {
+        let groups = await this.chatStore.getGroups();
+        for (let g of groups) {
+          if (g.groupId === chatItem.peerId && g.groupName !== '') {
+            chatItem.peerName = g.groupName;
+            break;
+          }
+        }
+      }
+    }
+
     // 未读计数：当前页面在查看时清零，否则累加
     let handler = this.chatHandlers.get(chatId);
     if (handler !== undefined) {
