@@ -390,6 +390,18 @@ export struct SettingsTab {
             .onClick(() => { router.pushUrl({ url: 'pages/VideoDebugPage' }); })
         }
         .width('82%')
+
+        // APNG 调试入口
+        ArcListItem() {
+          Text('APNG 动图调试')
+            .fontSize(14)
+            .fontColor('#FFB347')
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 14, bottom: 14 })
+            .onClick(() => { router.pushUrl({ url: 'pages/ApngDebugPage' }); })
+        }
+        .width('82%')
       }
       .width('100%')
       .height('100%')
