@@ -48,8 +48,8 @@ export default class EntryAbility extends UIAbility {
   onForeground(): void {
     RefreshLogger.getInstance().log('ENTRY-FG', 'onForeground');
     this.stopBackgroundTask();
-    // 每次回前台检查通知权限
-    this.checkNotificationPermission();
+    // 每次回前台检查并请求通知权限
+    this.requestNotificationPermission();
   }
 
   onBackground(): void {
