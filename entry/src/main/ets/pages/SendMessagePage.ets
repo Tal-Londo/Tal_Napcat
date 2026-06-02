@@ -272,6 +272,15 @@ struct SendMessagePage {
       arr.push(textSeg);
     }
 
+    // 去掉最后一条 text 消息末尾的换行符
+    if (arr.length > 0) {
+      let last = arr[arr.length - 1];
+      if ((last['type'] as string) === 'text') {
+        let d = last['data'] as Record<string, Object>;
+        let t = d['text'] as string || '';
+        d['text'] = t.replace(/\n+$/, '');
+      }
+    }
     return arr;
   }
 
