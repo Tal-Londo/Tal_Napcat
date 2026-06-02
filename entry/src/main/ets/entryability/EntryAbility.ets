@@ -122,7 +122,7 @@ export default class EntryAbility extends UIAbility {
         requestCode: 0,
         wantAgentFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
       });
-      let bgModes: string[] = ['dataTransfer'];
+      let bgModes: string[] = ['taskKeeping'];
       await backgroundTaskManager.startBackgroundRunning(ctx, bgModes, wAgent);
       RefreshLogger.getInstance().log('BG-START-OK', 'started');
     } catch (e) {
