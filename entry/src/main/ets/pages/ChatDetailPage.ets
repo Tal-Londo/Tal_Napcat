@@ -612,7 +612,7 @@ struct ChatDetailPage {
   requestArcListFocus(): void {
     setTimeout(() => {
       try {
-        this.getUIContext().getFocusController().requestFocus('chatArcList');
+        this.getUIContext().getFocusController().requestFocus('chatTitle');
       } catch (_e) {
       }
     }, 300);
@@ -923,6 +923,16 @@ struct ChatDetailPage {
       Column() {
         // 消息 ArcList
         ArcList({ scroller: this.scrollScroller }) {
+          // 标题条（焦点锚点）
+          ArcListItem() {
+            Row()
+              .width('100%')
+              .height(1)
+          }
+          .width('82%')
+          .focusable(true)
+          .id('chatTitle')
+
           if (this.loading) {
             ArcListItem() {
               Column() {
@@ -981,10 +991,6 @@ struct ChatDetailPage {
         .height('100%')
         .layoutWeight(1)
         .backgroundColor(Color.Black)
-        .focusable(true)
-        .focusOnTouch(true)
-        .defaultFocus(true)
-        .groupDefaultFocus(true)
         .id('chatArcList')
         .scrollBar(BarState.Auto)
         .space(LengthMetrics.vp(0))
