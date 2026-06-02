@@ -229,7 +229,7 @@ struct CrownDebugPage {
         .defaultFocus(true)
         .groupDefaultFocus(true)
         .id('homeArcList')
-        .scrollBar(BarState.Auto)
+        .scrollBar(BarState.Off)
         .padding({ left: 8, right: 8 })
       }
     }

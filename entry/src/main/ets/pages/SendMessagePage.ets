@@ -398,6 +398,9 @@ struct SendMessagePage {
       let ctx = this.getUIContext().getHostContext() as Context;
       let filePath = ctx.cacheDir + '/voice_' + Date.now() + '.m4a';
       RefreshLogger.getInstance().log('VOICE-REC', 'creating AVRecorder path=' + filePath);
+      // 提前创建文件并获取 fd，AVRecorder 需要 fd:// 协议
+      let fdFile = fileIo.openSync(filePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE);
+      RefreshLogger.getInstance().log('VOICE-REC-FD', 'fd=' + fdFile.fd);
 
       this.avRecorder = await media.createAVRecorder();
       let audioConfig: media.AVRecorderProfile = {
@@ -411,13 +414,13 @@ struct SendMessagePage {
       await this.avRecorder.prepare({
         audioSourceType: media.AudioSourceType.AUDIO_SOURCE_TYPE_MIC,
         profile: audioConfig,
-        url: 'file://' + filePath,
+        url: 'fd://' + fdFile.fd,
       });
       RefreshLogger.getInstance().log('VOICE-REC', 'prepared OK, starting');
       await this.avRecorder.start();
       this.isRecording = true;
       this.recordedFilePath = filePath;
-      RefreshLogger.getInstance().log('VOICE-REC-OK', 'recording started path=' + filePath);
+      RefreshLogger.getInstance().log('VOICE-REC-OK', 'recording started fd=' + fdFile.fd);
     } catch (e) {
       RefreshLogger.getInstance().log('VOICE-REC-ERR', 'recorder error: ' + (e as Error).message);
       this.isRecording = false;

@@ -326,8 +326,11 @@ struct ProfilePage {
               .margin({ right: 8 })
             Toggle({ type: ToggleType.Switch, isOn: this.isMuted })
               .onChange((value: boolean) => {
-                this.isMuted = value;
-                this.toggleMute();
+                // 先切状态再保存（toggle 会翻转，但 value 已经是最终值）
+                if (this.isMuted !== value) {
+                  this.isMuted = value;
+                  this.toggleMute();
+                }
               })
           }
           .width('100%')

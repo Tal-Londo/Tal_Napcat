@@ -38,6 +38,12 @@ struct HomePage {
   onPageShow(): void {
     // 从子页面返回时刷新，用于未读清零后更新列表
     this.refreshTrigger++;
+    // 重新获取 ArcSwiper 焦点，恢复表冠旋转
+    setTimeout(() => {
+      try {
+        this.getUIContext().getFocusController().requestFocus('');
+      } catch (_e) {}
+    }, 300);
   }
 
   getStateColor(): string {

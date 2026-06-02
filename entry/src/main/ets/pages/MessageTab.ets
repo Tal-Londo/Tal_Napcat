@@ -224,7 +224,7 @@ export struct MessageTab {
     .height('100%')
     .backgroundColor(Color.Black)
     .space(LengthMetrics.vp(0))
-    .scrollBar(BarState.Auto)
+    .scrollBar(BarState.Off)
     .padding({ left: 12, right: 12, top: 4, bottom: 4 })
   }
 }

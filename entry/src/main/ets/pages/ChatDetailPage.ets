@@ -98,7 +98,9 @@ struct ChatDetailPage {
   }
 
   async loadHistory(): Promise<void> {
+    RefreshLogger.getInstance().log('CDP-LOAD', 'start chatId=' + this.chatId);
     let cached: CachedMessage[] = await this.chatStore.getMessages(this.chatId, 100);
+    RefreshLogger.getInstance().log('CDP-LOAD', 'DB returned ' + cached.length + ' cached messages');
     // 清理：Napcat 不推送自己发的消息，占位消息在服务端回执后被替换
     // 所有负 messageId 的占位消息如果没有对应的服务端消息就保留
     let deduped: CachedMessage[] = [];
@@ -147,6 +149,7 @@ struct ChatDetailPage {
       deduped.push(cm);
     }
     deduped.sort((a, b) => a.timestamp - b.timestamp);
+    RefreshLogger.getInstance().log('CDP-LOAD', 'deduped=' + deduped.length + ' msgs loading=false');
     this.messages = deduped;
     this.messagesDataSource.setMessages(deduped);
     this.messagesDataSource.notifyDataReload();
@@ -613,18 +616,28 @@ struct ChatDetailPage {
   requestArcListFocus(): void {
     setTimeout(() => {
       try {
-        this.getUIContext().getFocusController().requestFocus('chatTitle');
+        this.getUIContext().getFocusController().requestFocus('chatArcList');
       } catch (_e) {
       }
     }, 300);
   }
 
   scrollToMessage(messageId: number): void {
-    // 闪烁高亮目标消息
     this.flashMsgId = messageId;
     setTimeout(() => { this.flashMsgId = 0; }, 2000);
 
-    // 估算位置并滚动
+    // 查找消息索引并滚动到该位置
+    for (let i = 0; i < this.messages.length; i++) {
+      if (this.messages[i].messageId === messageId) {
+        let idx = i;
+        // 先滚到底再通过 header index 定位
+        setTimeout(() => {
+          this.scrollScroller.scrollToIndex(idx);
+        }, 200);
+        return;
+      }
+    }
+    // 未找到，回退到底部
     setTimeout(() => {
       this.scrollScroller.scrollEdge(Edge.Bottom);
     }, 100);
@@ -935,16 +948,6 @@ struct ChatDetailPage {
       Column() {
         // 消息 ArcList
         ArcList({ scroller: this.scrollScroller }) {
-          // 标题条（焦点锚点）
-          ArcListItem() {
-            Row()
-              .width('100%')
-              .height(1)
-          }
-          .width('82%')
-          .focusable(true)
-          .id('chatTitle')
-
           if (this.loading) {
             ArcListItem() {
               Column() {
@@ -1010,7 +1013,11 @@ struct ChatDetailPage {
         .layoutWeight(1)
         .backgroundColor(Color.Black)
         .id('chatArcList')
-        .scrollBar(BarState.Auto)
+        .scrollBar(BarState.Off)
+        .focusable(true)
+        .focusOnTouch(true)
+        .defaultFocus(true)
+        .groupDefaultFocus(true)
         .space(LengthMetrics.vp(0))
         .onSizeChange((oldValue: SizeOptions, newValue: SizeOptions) => {
           let oldHeight = oldValue.height, newHeight = newValue.height;
