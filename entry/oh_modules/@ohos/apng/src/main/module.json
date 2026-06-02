@@ -1,0 +1,38 @@
+{
+	"app": {
+		"bundleName": "com.example.apng",
+		"versionCode": 1000000,
+		"versionName": "1.0.0",
+		"minAPIVersion": 12,
+		"targetAPIVersion": 12,
+		"apiReleaseType": "Release",
+		"compileSdkVersion": "5.0.0.71",
+		"compileSdkType": "OpenHarmony",
+		"appEnvironments": [],
+		"bundleType": "app"
+	},
+	"module": {
+		"name": "library",
+		"type": "har",
+		"deviceTypes": [
+			"default",
+			"tablet"
+		],
+		"requestPermissions": [
+			{
+				"name": "ohos.permission.INTERNET"
+			}
+		],
+		"metadata": [
+			{
+				"name": "UseTsHar",
+				"value": "true"
+			}
+		],
+		"packageName": "@ohos/apng",
+		"installationFree": false,
+		"virtualMachine": "ark12.0.2.0",
+		"compileMode": "esmodule",
+		"dependencies": []
+	}
+}

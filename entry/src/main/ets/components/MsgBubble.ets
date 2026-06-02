@@ -9,6 +9,7 @@ import { router } from '@kit.ArkUI';
 import { media } from '@kit.MediaKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { buffer } from '@kit.ArkTS';
+import { apngV2 } from '@ohos/apng';
 
 class MsgSegment {
   type: string = 'text';
@@ -573,10 +574,14 @@ export struct MsgBubble {
                 }
               }
               if (seg.type === 'face') {
-                Image(this.getFaceResource(seg.faceId))
+                apngV2({
+                  src: this.getFaceResource(seg.faceId),
+                  speedRate: 1,
+                  apngWidth: 22,
+                  apngHeight: 22
+                })
                   .width(22)
                   .height(22)
-                  .objectFit(ImageFit.Contain)
                   .margin({ left: 1, right: 1, top: 1, bottom: 1 })
               }
               if (seg.type === 'at') {
