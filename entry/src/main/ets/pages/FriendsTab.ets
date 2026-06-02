@@ -35,6 +35,18 @@ export struct FriendsTab {
     });
   }
 
+  openProfile(contact: ContactItem): void {
+    router.pushUrl({
+      url: 'pages/ProfilePage',
+      params: {
+        type: 'private',
+        peerId: contact.userId,
+        peerName: contact.getDisplayName(),
+        userId: contact.userId
+      }
+    });
+  }
+
   // 用昵称首字生成头像颜色
   getAvatarColor(name: string): string {
     let colors: string[] = ['#C0B8E0', '#FFB347', '#4DA6FF', '#00CC88', '#FF7777', '#77BBFF'];
@@ -137,6 +149,10 @@ export struct FriendsTab {
           .padding({ left: 6, right: 6 })
           .borderRadius(10)
           .onClick(() => { this.openChat(friend); })
+          .gesture(
+            LongPressGesture({ repeat: false, duration: 500 })
+              .onAction(() => { this.openProfile(friend); })
+          )
         }
         .width('82%')
         .margin({ bottom: 4 })

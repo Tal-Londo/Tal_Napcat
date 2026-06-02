@@ -35,6 +35,17 @@ export struct GroupsTab {
     });
   }
 
+  openProfile(group: GroupItem): void {
+    router.pushUrl({
+      url: 'pages/ProfilePage',
+      params: {
+        type: 'group',
+        peerId: group.groupId,
+        peerName: group.groupName || ('群' + group.groupId)
+      }
+    });
+  }
+
   getAvatarColor(name: string): string {
     let colors: string[] = ['#C0B8E0', '#4DA6FF', '#00CC88', '#FFB347', '#FF7777', '#77BBFF'];
     let sum = 0;
@@ -134,6 +145,10 @@ export struct GroupsTab {
           .padding({ left: 6, right: 6 })
           .borderRadius(10)
           .onClick(() => { this.openChat(group); })
+          .gesture(
+            LongPressGesture({ repeat: false, duration: 500 })
+              .onAction(() => { this.openProfile(group); })
+          )
         }
         .width('82%')
         .margin({ bottom: 4 })
