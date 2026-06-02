@@ -165,7 +165,7 @@ struct ChatDetailPage {
     }
 
     let req: OneBotRequest = OneBotRequest.createGetMsgHistory(
-      this.peerId, this.chatType, undefined, 20);
+      this.peerId, this.chatType, undefined, 50);
     this.wsManager.sendRequestWithCallback(req, (data: Record<string, Object>) => {
       this.handleHistoryResponse(data);
     });
@@ -698,7 +698,7 @@ struct ChatDetailPage {
       }
     }
     let req: OneBotRequest = OneBotRequest.createGetMsgHistory(
-      this.peerId, this.chatType, undefined, 20);
+      this.peerId, this.chatType, undefined, 50);
     // OneBot API: message_id 作为分页游标，返回比该 ID 更早的消息
     // message_id=0 返回最新，message_id=anchor 返回更旧的消息
     req.params['message_id'] = anchorId;
