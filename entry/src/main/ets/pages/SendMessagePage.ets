@@ -34,6 +34,7 @@ struct SendMessagePage {
   @State showFacePicker: boolean = false;
   @State allFaceIds: number[] = [];
   @State isRecording: boolean = false;
+  @State sending: boolean = false;
   @State recordedFilePath: string = '';
   private placeholderMap: SqPlaceholder[] = [];
   private sqCounter: number = 0;
@@ -275,6 +276,8 @@ struct SendMessagePage {
   }
 
   async sendAndClose(): Promise<void> {
+    if (this.sending) { return; }
+
     let arr = this.buildMsgArr();
     if (arr.length === 0) {
       return;
@@ -296,14 +299,18 @@ struct SendMessagePage {
       'echo': 'send_msg_' + Date.now()
     };
 
-    this.wsManager.sendRequest(reqObj);
-
-    // 保存本地占位消息，Napcat 不回显自己的消息
+    this.sending = true;
+    // 先保存占位，再等 WS 回执
     await this.savePlaceholder(arr);
 
-    // 标记已发送，aboutToDisappear 保存时会写空草稿
-    this.sent = true;
-    router.back();
+    this.wsManager.sendRequestWithCallback(reqObj, (data: Record<string, Object>) => {
+      let retcode = data['retcode'] as number ?? 1;
+      if (retcode === 0) {
+        this.sent = true;
+        router.back();
+      }
+      // 失败不退，用户可重试
+    });
   }
 
   async savePlaceholder(segments: Record<string, Object>[]): Promise<void> {
@@ -430,18 +437,24 @@ struct SendMessagePage {
       RefreshLogger.getInstance().log('VOICE-SEND-ERR', 'failed to read/encode voice file');
       return;
     }
+    if (this.sending) { return; }
     RefreshLogger.getInstance().log('VOICE-SEND', 'sending size=' + sendFile.length + ' file=' + this.recordedFilePath);
     let req = OneBotRequest.createSendVoice(
       this.peerId, this.chatType, sendFile);
-    this.wsManager.sendRequest(req);
 
     // 保存本地占位消息
     let voiceData: Record<string, Object> = { 'file': this.recordedFilePath };
     let voiceSeg: Record<string, Object> = { 'type': 'record', 'data': voiceData };
     await this.savePlaceholder([voiceSeg]);
 
-    this.sent = true;
-    router.back();
+    this.sending = true;
+    this.wsManager.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+      let retcode = data['retcode'] as number ?? 1;
+      if (retcode === 0) {
+        this.sent = true;
+        router.back();
+      }
+    });
   }
 
   build() {
@@ -640,12 +653,13 @@ struct SendMessagePage {
         // ArcButton 发送
         ArcButton({
           options: new ArcButtonOptions({
-            label: this.isRecording ? '停止录音' : '发送',
+            label: this.sending ? '发送中...' : (this.isRecording ? '停止录音' : '发送'),
             position: ArcButtonPosition.BOTTOM_EDGE,
             styleMode: ArcButtonStyleMode.CUSTOM,
-            backgroundColor: ColorMetrics.resourceColor(this.isRecording ? '#FF4444' : '#C0B8E0'),
+            backgroundColor: ColorMetrics.resourceColor(this.sending ? '#888888' : (this.isRecording ? '#FF4444' : '#C0B8E0')),
             fontSize: new LengthMetrics(15, LengthUnit.FP),
             onClick: () => {
+              if (this.sending) { return; }
               if (this.isRecording) {
                 this.stopRecording();
               } else {
@@ -654,11 +668,19 @@ struct SendMessagePage {
             }
           })
         })
-        // 录音状态指示
+        // 录音/发送状态指示
         if (this.isRecording) {
           Text('🔴 正在录音...')
             .fontSize(12)
             .fontColor('#FF4444')
+            .textAlign(TextAlign.Center)
+            .width('76%')
+            .padding({ bottom: 4 })
+        }
+        if (this.sending) {
+          Text('⏳ 正在发送...')
+            .fontSize(12)
+            .fontColor('#C0B8E0')
             .textAlign(TextAlign.Center)
             .width('76%')
             .padding({ bottom: 4 })
