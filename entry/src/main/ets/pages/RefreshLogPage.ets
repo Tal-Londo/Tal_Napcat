@@ -139,7 +139,7 @@ struct RefreshLogPage {
       .focusOnTouch(true)
       .defaultFocus(true)
       .id('refreshLogList')
-      .scrollBar(BarState.Off)
+      .scrollBar(BarState.Auto)
       .padding({ left: 12, right: 12, top: 4, bottom: 4 })
 
       ArcButton({

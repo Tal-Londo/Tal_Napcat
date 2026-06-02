@@ -399,7 +399,7 @@ export struct SettingsTab {
       .defaultFocus(true)
       .groupDefaultFocus(true)
       .id('settingsArcList')
-      .scrollBar(BarState.Off)
+      .scrollBar(BarState.Auto)
       .padding({ left: 12, right: 12 })
   }
 }

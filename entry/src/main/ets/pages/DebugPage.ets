@@ -475,7 +475,7 @@ struct DebugPage {
     .defaultFocus(true)
     .groupDefaultFocus(true)
     .id('arcListDebug')
-    .scrollBar(BarState.Off)
+    .scrollBar(BarState.Auto)
     .padding({ left: 8, right: 8 })
   }
 
