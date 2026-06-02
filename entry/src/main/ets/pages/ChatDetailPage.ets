@@ -294,6 +294,13 @@ struct ChatDetailPage {
         m.card = String(obj['card'] || '');
         m.role = String(obj['role'] || '');
         m.title = String(obj['title'] || '');
+        m.sex = String(obj['sex'] || '');
+        m.age = parseInt(String(obj['age'] || '0'));
+        m.area = String(obj['area'] || '');
+        m.level = String(obj['level'] || '');
+        m.qqLevel = parseInt(String(obj['qq_level'] || '0'));
+        m.joinTime = parseInt(String(obj['join_time'] || '0'));
+        m.lastSentTime = parseInt(String(obj['last_sent_time'] || '0'));
         members.push(m);
       }
       this.chatStore.setGroupMembers(this.peerId, members);

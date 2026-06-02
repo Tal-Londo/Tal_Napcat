@@ -1,5 +1,6 @@
 import { ArcList, ArcListItem, LengthMetrics, router } from '@kit.ArkUI';
 import { ChatStore, ChatItem } from '../model/ChatStore';
+import { ConfigManager } from '../model/ConfigManager';
 
 @Component
 export struct MessageTab {
@@ -19,8 +20,16 @@ export struct MessageTab {
   }
 
   async loadChats(): Promise<void> {
-    await this.chatStore.initDb(this.getUIContext().getHostContext() as Context);
+    let ctx = this.getUIContext().getHostContext() as Context;
+    await this.chatStore.initDb(ctx);
     this.chats = await this.chatStore.getChats(50);
+    // 加载免打扰状态
+    let configMgr = ConfigManager.getInstance();
+    await configMgr.initDb(ctx);
+    let mutedJson = await configMgr.getString('muted_chats', '[]');
+    for (let chat of this.chats) {
+      chat.isMuted = mutedJson.indexOf('"' + chat.chatId + '"') >= 0;
+    }
     this.renderKey = this.renderKey + 1;
   }
 
@@ -47,6 +56,18 @@ export struct MessageTab {
         peer_id: chat.peerId,
         peer_name: chat.peerName,
         chat_type: chat.chatType
+      }
+    });
+  }
+
+  openProfile(chat: ChatItem): void {
+    router.pushUrl({
+      url: 'pages/ProfilePage',
+      params: {
+        type: chat.chatType,
+        peerId: chat.peerId,
+        peerName: chat.peerName,
+        userId: chat.peerId
       }
     });
   }
@@ -157,6 +178,12 @@ export struct MessageTab {
             .alignItems(HorizontalAlign.Start)
 
             Column() {
+              if (chat.isMuted) {
+                Text('静音')
+                  .fontSize(9)
+                  .fontColor('#555555')
+                  .margin({ bottom: 2 })
+              }
               Text(this.formatTime(chat.lastMessageTime))
                 .fontSize(10)
                 .fontColor('#666666')
@@ -166,7 +193,7 @@ export struct MessageTab {
                   .fontSize(10)
                   .fontWeight(FontWeight.Bold)
                   .fontColor(Color.White)
-                  .backgroundColor('#C0B8E0')
+                  .backgroundColor(chat.isMuted ? '#555555' : '#C0B8E0')
                   .borderRadius(10)
                   .width(22)
                   .height(18)
@@ -183,9 +210,11 @@ export struct MessageTab {
           .alignItems(VerticalAlign.Center)
           .padding({ left: 6, right: 6 })
           .borderRadius(10)
-          .onClick(() => {
-            this.openChat(chat);
-          })
+          .onClick(() => { this.openChat(chat); })
+          .gesture(
+            LongPressGesture({ repeat: false, duration: 500 })
+              .onAction(() => { this.openProfile(chat); })
+          )
         }
         .width('82%')
         .margin({ bottom: 4 })

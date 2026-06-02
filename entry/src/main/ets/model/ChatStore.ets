@@ -59,6 +59,7 @@ export class ChatItem {
   lastMessageTime: number = 0;
   unreadCount: number = 0;
   isTop: boolean = false;
+  isMuted: boolean = false;
 
   static fromRow(row: ChatRow): ChatItem {
     let item = new ChatItem();
@@ -162,6 +163,13 @@ export class GroupMember {
   card: string = '';
   role: string = '';
   title: string = '';
+  sex: string = '';
+  age: number = 0;
+  area: string = '';
+  level: string = '';
+  qqLevel: number = 0;
+  joinTime: number = 0;
+  lastSentTime: number = 0;
 
   getDisplayName(): string {
     if (this.card !== '') {

@@ -9,6 +9,7 @@
     "pages/SendMessagePage",
     "pages/CrownDebugPage",
     "pages/RefreshLogPage",
-    "pages/VideoDebugPage"
+    "pages/VideoDebugPage",
+    "pages/ProfilePage"
   ]
 }

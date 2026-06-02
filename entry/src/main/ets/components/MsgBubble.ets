@@ -153,6 +153,31 @@ export struct MsgBubble {
     return '#4DA6FF';
   }
 
+  openProfile(): void {
+    if (this.groupPeerId > 0) {
+      router.pushUrl({
+        url: 'pages/ProfilePage',
+        params: {
+          type: 'member',
+          peerId: this.msg.userId,
+          peerName: this.msg.nickname,
+          groupId: this.groupPeerId,
+          userId: this.msg.userId
+        }
+      });
+    } else {
+      router.pushUrl({
+        url: 'pages/ProfilePage',
+        params: {
+          type: 'private',
+          peerId: this.msg.userId,
+          peerName: this.msg.nickname,
+          userId: this.msg.userId
+        }
+      });
+    }
+  }
+
   getAtName(seg: MsgSegment): string {
     if (seg.qq === 'all') {
       return '@全体成员';
@@ -465,6 +490,7 @@ export struct MsgBubble {
           .backgroundColor(this.getAvatarColor(this.msg.nickname || ''))
           .clip(true)
           .margin({ right: 6, top: 10 })
+          .onClick(() => { this.openProfile(); })
         }
 
         Column() {

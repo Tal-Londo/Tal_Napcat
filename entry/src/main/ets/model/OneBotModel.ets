@@ -118,6 +118,22 @@ export class OneBotRequest {
     return req;
   }
 
+  static createGetStrangerInfo(userId: number, echo?: string): OneBotRequest {
+    let req = new OneBotRequest();
+    req.action = 'get_stranger_info';
+    req.params = { 'user_id': userId, 'no_cache': true };
+    req.echo = echo || 'get_stranger_info';
+    return req;
+  }
+
+  static createGetGroupDetailInfo(groupId: number, echo?: string): OneBotRequest {
+    let req = new OneBotRequest();
+    req.action = 'get_group_detail_info';
+    req.params = { 'group_id': groupId };
+    req.echo = echo || 'get_group_detail';
+    return req;
+  }
+
   toJson(): string {
     return JSON.stringify(this);
   }

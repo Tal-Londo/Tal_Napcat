@@ -357,9 +357,12 @@ export class MessageCenter {
       handler(msg);
     }
 
-    // 不在聊天页面且不是自己发的消息 → 推送通知
+    // 不在聊天页面且不是自己发的消息 → 推送通知（静音跳过）
     if (handler === undefined && chatItem.unreadCount > 0) {
-      this.publishNotification(chatItem, cm);
+      let mutedJson = await this.configManager.getString('muted_chats', '[]');
+      if (mutedJson.indexOf('"' + chatId + '"') < 0) {
+        this.publishNotification(chatItem, cm);
+      }
     }
 
     for (let h of this.globalHandlers) {
