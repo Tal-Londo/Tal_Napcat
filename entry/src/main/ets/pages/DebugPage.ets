@@ -30,7 +30,7 @@ struct UploadIpDialog {
         .fontColor('#888888')
         .margin({ bottom: 6 })
 
-      TextInput({ text: this.ipText, placeholder: '192.168.0.119' })
+      TextInput({ text: this.ipText, placeholder: 'super.tkcloud.online' })
         .fontSize(14)
         .fontColor(Color.White)
         .placeholderColor('#555555')

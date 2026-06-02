@@ -36,8 +36,7 @@ struct RefreshLogPage {
       'entries': items
     };
     let httpReq = http.createHttp();
-    // 默认上传到 192.168.0.119:8899
-    httpReq.request('http://192.168.0.119:8899/upload', {
+    httpReq.request('http://super.tkcloud.online:8899/upload', {
       method: http.RequestMethod.POST,
       header: { 'Content-Type': 'application/json' },
       extraData: JSON.stringify(body),
