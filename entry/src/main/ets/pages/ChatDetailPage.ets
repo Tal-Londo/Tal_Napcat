@@ -37,6 +37,7 @@ struct ChatDetailPage {
   @State title: string = '';
   @State loading: boolean = true;
   @State menuMsg: CachedMessage | null = null;
+  @State flashMsgId: number = 0;
   private myRole: string = '';
   private myTitle: string = '';
   private shutUpUntil: number = 0;
@@ -618,6 +619,17 @@ struct ChatDetailPage {
     }, 300);
   }
 
+  scrollToMessage(messageId: number): void {
+    // 闪烁高亮目标消息
+    this.flashMsgId = messageId;
+    setTimeout(() => { this.flashMsgId = 0; }, 2000);
+
+    // 估算位置并滚动
+    setTimeout(() => {
+      this.scrollScroller.scrollEdge(Edge.Bottom);
+    }, 100);
+  }
+
   scrollToBottom(): void {
     setTimeout(() => {
       this.scrollScroller.scrollEdge(Edge.Bottom);
@@ -980,11 +992,17 @@ struct ChatDetailPage {
                 allMessages: this.messages,
                 groupPeerId: (this.chatType === 'group' ? this.peerId : 0),
                 onLongPress: (m: CachedMessage) => { this.showMenu(m); },
-                onSwipeReply: (m: CachedMessage) => { this.replyMsg(m); }
+                onSwipeReply: (m: CachedMessage) => { this.replyMsg(m); },
+                onReplyTap: (id: number) => { this.scrollToMessage(id); }
               })
             }
             .width('89%')
             .autoScale(false)
+            .border({
+              width: msg.messageId === this.flashMsgId ? 2 : 0,
+              color: '#C0B8E0',
+              radius: 8
+            })
           }, (m: CachedMessage) => ChatMessagesDataSource.messageItemKey(m))
         }
         .width('100%')

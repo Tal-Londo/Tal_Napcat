@@ -37,6 +37,7 @@ export struct MsgBubble {
   @Prop groupPeerId: number = 0;
   onLongPress?: (msg: CachedMessage) => void;
   onSwipeReply?: (msg: CachedMessage) => void;
+  onReplyTap?: (messageId: number) => void;
   @State voicePlaying: boolean = false;
   @State voiceLoading: boolean = false;
   private avPlayer: media.AVPlayer | null = null;
@@ -603,6 +604,11 @@ export struct MsgBubble {
                     .borderColor(this.isSelf() ? '#777777' : '#888888')
                     .padding({ left: 6, top: 2, bottom: 2 })
                     .margin({ bottom: 3 })
+                    .onClick(() => {
+                      if (this.onReplyTap) {
+                        this.onReplyTap(parseInt(seg.replyId));
+                      }
+                    })
                 } else {
                   Text('[回复]')
                     .fontSize(11)
