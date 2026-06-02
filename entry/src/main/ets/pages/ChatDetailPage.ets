@@ -673,9 +673,10 @@ struct ChatDetailPage {
     }
     let req: OneBotRequest = OneBotRequest.createGetMsgHistory(
       this.peerId, this.chatType, undefined, 20);
-    // 传入 message_seq 拉取更早的消息
-    req.params['message_seq'] = anchorId;
+    // OneBot API: message_id 作为分页游标，返回比该 ID 更早的消息
+    // message_id=0 返回最新，message_id=anchor 返回更旧的消息
     req.params['message_id'] = anchorId;
+    RefreshLogger.getInstance().log('CDP-MORE-FETCH', 'anchor message_id=' + anchorId);
     this.wsManager.sendRequestWithCallback(req, (data: Record<string, Object>) => {
       this.handleMoreHistory(data);
     });

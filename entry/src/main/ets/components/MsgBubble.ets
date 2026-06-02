@@ -627,27 +627,11 @@ export struct MsgBubble {
                 }
               }
               if (seg.type === 'face') {
-                Stack({ alignContent: Alignment.TopStart }) {
-                  // 底层静态图（始终可见，兜底）
-                  Image(this.getFaceResource(seg.faceId))
-                    .width(22)
-                    .height(22)
-                    .objectFit(ImageFit.Contain)
-                  // 上层 APNG 动画（尝试覆盖静态图）
-                  // 如果 apngV2 不渲染，底层 Image 可见；渲染成功则覆盖
-                  apngV2({
-                    src: this.getFaceResource(seg.faceId),
-                    speedRate: 1,
-                    apngWidth: 22,
-                    apngHeight: 22
-                  })
-                    .width(22)
-                    .height(22)
-                }
-                .width(22)
-                .height(22)
-                .clip(true)
-                .margin({ left: 1, right: 1, top: 1, bottom: 1 })
+                Image(this.getFaceResource(seg.faceId))
+                  .width(22)
+                  .height(22)
+                  .objectFit(ImageFit.Contain)
+                  .margin({ left: 1, right: 1, top: 1, bottom: 1 })
               }
               if (seg.type === 'at') {
                 Text(this.getAtName(seg) + ' ')
