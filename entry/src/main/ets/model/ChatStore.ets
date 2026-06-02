@@ -436,6 +436,41 @@ export class ChatStore {
     return result;
   }
 
+  async getMessagesBefore(chatId: string, beforeTs: number, limit: number = 50): Promise<CachedMessage[]> {
+    if (this.rdbStore === null) {
+      return [];
+    }
+    let result: CachedMessage[] = [];
+    try {
+      let predicates = new relationalStore.RdbPredicates('messages');
+      predicates.equalTo('chat_id', chatId);
+      predicates.lessThan('timestamp', beforeTs);
+      predicates.orderByDesc('timestamp');
+      predicates.limitAs(limit);
+      let rs = await this.rdbStore.query(predicates);
+      while (rs.goToNextRow()) {
+        let row: MsgRow = {
+          id: rs.getLong(rs.getColumnIndex('id')),
+          message_id: rs.getLong(rs.getColumnIndex('message_id')),
+          chat_id: rs.getString(rs.getColumnIndex('chat_id')),
+          user_id: rs.getLong(rs.getColumnIndex('user_id')),
+          nickname: rs.getString(rs.getColumnIndex('nickname')),
+          content: rs.getString(rs.getColumnIndex('content')),
+          raw_message: rs.getString(rs.getColumnIndex('raw_message')),
+          msg_type: rs.getString(rs.getColumnIndex('msg_type')),
+          timestamp: rs.getLong(rs.getColumnIndex('timestamp')),
+          is_self: rs.getLong(rs.getColumnIndex('is_self'))
+        };
+        result.push(CachedMessage.fromRow(row));
+      }
+      rs.close();
+      result.reverse();
+    } catch (err) {
+      hilog.error(DOMAIN, TAG, `getMessagesBefore failed`);
+    }
+    return result;
+  }
+
   async saveMessage(msg: CachedMessage): Promise<void> {
     if (this.rdbStore === null) {
       return;

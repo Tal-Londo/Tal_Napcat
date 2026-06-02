@@ -688,94 +688,35 @@ struct ChatDetailPage {
       return;
     }
     this.loadingMore = true;
-    RefreshLogger.getInstance().log('CDP-MORE', 'loading older messages, current count=' + this.messages.length);
-    // 用最旧消息的 messageId 作为锚点，拉取上一页
-    let anchorId = this.messages[0].messageId;
-    if (anchorId <= 0) {
-      // 跳过占位消息取下一个
-      for (let i = 1; i < this.messages.length; i++) {
-        if (this.messages[i].messageId > 0) { anchorId = this.messages[i].messageId; break; }
-      }
-    }
-    let req: OneBotRequest = OneBotRequest.createGetMsgHistory(
-      this.peerId, this.chatType, undefined, 50);
-    // OneBot API: message_id 作为分页游标，返回比该 ID 更早的消息
-    // message_id=0 返回最新，message_id=anchor 返回更旧的消息
-    req.params['message_id'] = anchorId;
-    RefreshLogger.getInstance().log('CDP-MORE-FETCH', 'anchor message_id=' + anchorId);
-    this.wsManager.sendRequestWithCallback(req, (data: Record<string, Object>) => {
-      this.handleMoreHistory(data);
-    });
-  }
-
-  async handleMoreHistory(data: Record<string, Object>): Promise<void> {
-    try {
-      let retcode = data['retcode'] as number ?? 1;
-      if (retcode !== 0) { this.loadingMore = false; return; }
-      let payload = data['data'] as Record<string, Object>;
-      if (payload === undefined) { this.loadingMore = false; return; }
-      let msgArr = payload['messages'] as Object[];
-      if (msgArr === undefined || msgArr.length === 0) {
+    let oldestTs = this.messages[0].timestamp;
+    RefreshLogger.getInstance().log('CDP-MORE', 'loading from DB before ts=' + oldestTs + ' current=' + this.messages.length);
+    this.chatStore.getMessagesBefore(this.chatId, oldestTs, 50).then((older: CachedMessage[]) => {
+      if (older.length === 0) {
         this.hasMore = false;
         this.loadingMore = false;
-        RefreshLogger.getInstance().log('CDP-MORE', 'no more messages');
+        RefreshLogger.getInstance().log('CDP-MORE', 'no more cached messages');
         return;
       }
       let existingIds: Set<number> = new Set();
       for (let m of this.messages) { if (m.messageId > 0) { existingIds.add(m.messageId); } }
       let newMsgs: CachedMessage[] = [];
-      for (let item of msgArr) {
-        let obj = item as Record<string, Object>;
-        let msgId = parseInt(String(obj['message_id'] || '0'));
-        if (msgId > 0 && existingIds.has(msgId)) { continue; }
-        existingIds.add(msgId);
-        let rawMsg = String(obj['raw_message'] || '');
-        let sender = obj['sender'] as Record<string, Object> || {};
-        let msgTime = parseInt(String(obj['time'] || '0')) * 1000;
-        let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
-        this.fillSenderRole(cm);
-        await this.chatStore.saveMessage(cm);
+      for (let cm of older) {
+        cm.isSelf = cm.userId === this.selfId;
+        if (cm.messageId > 0 && existingIds.has(cm.messageId)) { continue; }
         newMsgs.push(cm);
       }
       if (newMsgs.length > 0) {
         newMsgs.sort((a, b) => a.timestamp - b.timestamp);
-        // 插入旧消息到列表头部
         this.messages = [...newMsgs, ...this.messages];
-
-        // 清理孤消息
-        let serverIds: Set<number> = new Set();
-        for (let item of msgArr) {
-          let obj = item as Record<string, Object>;
-          let mid = parseInt(String(obj['message_id'] || '0'));
-          if (mid > 0) { serverIds.add(mid); }
-        }
-        let allMsgs = this.messages;
-        let cleaned: CachedMessage[] = [];
-        for (let i = 0; i < allMsgs.length; i++) {
-          let m = allMsgs[i];
-          if (m.messageId > 0 && !serverIds.has(m.messageId)) {
-            let hasPrev = i > 0 && serverIds.has(allMsgs[i-1].messageId);
-            let hasNext = i < allMsgs.length-1 && serverIds.has(allMsgs[i+1].messageId);
-            if (hasPrev || hasNext) {
-              await this.chatStore.deleteMessageByMsgId(m.messageId);
-              continue;
-            }
-          }
-          cleaned.push(m);
-        }
-        this.messages = cleaned;
-
         this.messagesDataSource.setMessages(this.messages);
         this.messagesDataSource.notifyDataReload();
         this.requestArcListFocus();
-        RefreshLogger.getInstance().log('CDP-MORE', 'loaded ' + newMsgs.length + ' older messages, total=' + this.messages.length);
+        RefreshLogger.getInstance().log('CDP-MORE', 'loaded ' + newMsgs.length + ' from DB, total=' + this.messages.length);
       } else {
         this.hasMore = false;
       }
-    } catch (e) {
-      RefreshLogger.getInstance().log('CDP-MORE-ERR', 'error: ' + (e as Error).message);
-    }
-    this.loadingMore = false;
+      this.loadingMore = false;
+    });
   }
 
   scrollToBottom(): void {
