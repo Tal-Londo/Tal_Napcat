@@ -136,8 +136,18 @@ export class MessageFormatter {
     let isGroup = isGroupChat(msg);
     item.peerId = isGroup ? msg.group_id : msg.user_id;
     item.chatId = item.chatType + '_' + item.peerId;
-    item.peerName = isGroup ? ('群' + msg.group_id) : getSenderName(msg);
-    item.lastMessage = MessageFormatter.getTextSummary(msg);
+    // 群聊保留已有 peerName（由 handleRecentContact 设置），私聊用发送者名
+    if (!isGroup) {
+      item.peerName = getSenderName(msg);
+    }
+    // 群聊预览显示「发送者: 内容」，私聊显示「内容」
+    let summary = MessageFormatter.getTextSummary(msg);
+    if (isGroup && msg.user_id !== selfId) {
+      let sName = msg.sender.card || msg.sender.nickname || String(msg.user_id);
+      item.lastMessage = sName + ': ' + summary;
+    } else {
+      item.lastMessage = summary;
+    }
     item.lastMessageTime = msg.time * 1000;
     item.unreadCount = msg.user_id !== selfId ? 1 : 0;
     return item;

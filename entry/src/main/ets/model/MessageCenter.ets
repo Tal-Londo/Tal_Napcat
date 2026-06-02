@@ -379,7 +379,9 @@ export class MessageCenter {
       if (!isEnabled) {
         return;
       }
-      let chatName = chatItem.peerName || chatItem.chatId;
+      let isGroup = chatItem.chatType === 'group';
+      // 群聊通知标题: 「发送者昵称 @ 群名」, 私聊: 「发送者昵称」
+      let chatName = isGroup ? (cm.nickname + ' @ ' + (chatItem.peerName || ('群' + chatItem.peerId))) : (chatItem.peerName || String(chatItem.peerId));
       let msgPreview = cm.rawMessage || '[消息]';
       if (msgPreview.length > 30) { msgPreview = msgPreview.substring(0, 30) + '...'; }
 
