@@ -373,10 +373,30 @@ export class MessageCenter {
       handler(msg);
     }
 
-    // 不在聊天页面且不是自己发的消息 → 推送通知（静音跳过）
+    // 不在聊天页面且不是自己发的消息 → 推送通知
+    // 静音跳过，但 @ 我的消息始终通知
     if (handler === undefined && chatItem.unreadCount > 0) {
       let mutedJson = await this.configManager.getString('muted_chats', '[]');
-      if (mutedJson.indexOf('"' + chatId + '"') < 0) {
+      let isMuted = mutedJson.indexOf('"' + chatId + '"') >= 0;
+      let atMe = false;
+      if (isMuted && msg.message_type === 'group') {
+        // 检查是否有 @ 自己的 at 段
+        try {
+          let segs = msg.message instanceof Array ? msg.message as Object[] : JSON.parse(msg.message as string || '[]') as Object[];
+          for (let seg of segs) {
+            let s = seg as Record<string, Object>;
+            if ((s['type'] as string) === 'at') {
+              let d = s['data'] as Record<string, Object> || {};
+              let qq = d['qq'] as string || '';
+              if (qq === 'all' || parseInt(qq) === this.selfId) {
+                atMe = true;
+                break;
+              }
+            }
+          }
+        } catch (_e) {}
+      }
+      if (!isMuted || atMe) {
         this.publishNotification(chatItem, cm);
       }
     }
