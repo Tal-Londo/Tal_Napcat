@@ -6,7 +6,6 @@ import { backgroundTaskManager } from '@kit.BackgroundTasksKit';
 import { wantAgent, common } from '@kit.AbilityKit';
 import { RefreshLogger } from '../model/RefreshLogger';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { GlobalContext } from '@ohos/apng';
 
 const DOMAIN = 0x0000;
 const TAG = 'EntryAbility';
@@ -16,8 +15,6 @@ export default class EntryAbility extends UIAbility {
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     EntryAbility.context = this.context;
-    // apng 库需要 Context，在 onCreate 时注入
-    try { GlobalContext.getContext().setObject('MainContext', this.context); } catch (_e) {}
     try {
       this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
     } catch (err) {

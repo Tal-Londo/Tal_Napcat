@@ -591,12 +591,13 @@ export struct MsgBubble {
               }
               if (seg.type === 'image') {
                 if (seg.subType === 1 && seg.url !== '') {
-                  // 动图表情（sub_type=1）用 apngV2 动画渲染
+                  // 动图表情（sub_type=1）用 apngV2 动画渲染（网络 URL）
                   apngV2({
                     src: seg.url,
                     speedRate: 1,
                     apngWidth: 120,
-                    apngHeight: 120
+                    apngHeight: 120,
+                    context: getContext()
                   })
                     .width(120)
                     .height(120)
