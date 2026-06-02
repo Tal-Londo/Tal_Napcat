@@ -10,6 +10,7 @@
     "pages/CrownDebugPage",
     "pages/RefreshLogPage",
     "pages/VideoDebugPage",
-    "pages/ProfilePage"
+    "pages/ProfilePage",
+    "pages/ForwardDetailPage"
   ]
 }

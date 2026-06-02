@@ -465,10 +465,15 @@ struct ChatDetailPage {
           parts.push('[视频]');
         } else if (segType === 'file') {
           parts.push('[文件]');
+        } else if (segType === 'forward') {
+          parts.push('[聊天记录]');
         }
       }
       if (parts.length > 0) {
         cm.rawMessage = parts.join('');
+      } else if (msgSegs && msgSegs.length === 1 &&
+        ((msgSegs[0] as Record<string, Object>)['type'] as string) === 'forward') {
+        cm.rawMessage = '[聊天记录]';
       }
     }
     cm.msgType = 'text';

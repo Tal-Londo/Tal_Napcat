@@ -118,6 +118,14 @@ export class OneBotRequest {
     return req;
   }
 
+  static createGetForwardMsg(forwardId: string, echo?: string): OneBotRequest {
+    let req = new OneBotRequest();
+    req.action = 'get_forward_msg';
+    req.params = { 'message_id': forwardId };
+    req.echo = echo || 'get_forward_msg';
+    return req;
+  }
+
   static createGetStrangerInfo(userId: number, echo?: string): OneBotRequest {
     let req = new OneBotRequest();
     req.action = 'get_stranger_info';

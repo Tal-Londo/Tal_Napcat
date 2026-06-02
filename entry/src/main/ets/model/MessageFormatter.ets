@@ -26,6 +26,7 @@ function getDisplayText(msg: OneBotMessage): string {
       else if (stype === 'video') { parts.push('[视频]'); }
       else if (stype === 'file') { parts.push('[文件]'); }
       else if (stype === 'reply') { parts.push('[回复]'); }
+      else if (stype === 'forward') { parts.push('[聊天记录]'); }
     }
     return parts.join('');
   }

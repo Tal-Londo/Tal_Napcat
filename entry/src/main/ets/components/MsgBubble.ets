@@ -22,6 +22,8 @@ class MsgSegment {
   recordFile: string = '';
   videoFile: string = '';       // video file path from data
   videoThumb: string = '';      // video thumbnail URL from data
+  forwardId: string = '';       // forward message ID
+  forwardContent: string = '';  // JSON array of sub-messages
 }
 
 @Component
@@ -276,7 +278,13 @@ export struct MsgBubble {
           if (s.type === 'video') {
             s.videoFile = data['file'] as string || data['url'] as string || '';
             s.videoThumb = data['thumb'] as string || '';
-            // 视频文件过大不缓存，直接流式播放
+          }
+          if (s.type === 'forward') {
+            s.forwardId = data['id'] as string || '';
+            let content = data['content'];
+            if (content !== undefined && content !== null) {
+              s.forwardContent = JSON.stringify(content);
+            }
           }
         }
         result.push(s);
@@ -647,6 +655,32 @@ export struct MsgBubble {
                 Text(seg.fileName || '[文件]')
                   .fontSize(12)
                   .fontColor(this.isSelf() ? '#555555' : '#AAAAAA')
+              }
+              if (seg.type === 'forward') {
+                Column() {
+                  Text('合并转发')
+                    .fontSize(12)
+                    .fontColor(this.isSelf() ? '#333333' : '#C0B8E0')
+                    .fontWeight(FontWeight.Bold)
+                    .margin({ bottom: 4 })
+                  Text('点击查看详情')
+                    .fontSize(11)
+                    .fontColor(this.isSelf() ? '#555555' : '#888888')
+                }
+                .padding({ top: 4, bottom: 4, left: 8, right: 8 })
+                .borderWidth(1)
+                .borderColor(this.isSelf() ? '#999999' : '#555555')
+                .borderRadius(6)
+                .width('100%')
+                .onClick(() => {
+                  router.pushUrl({
+                    url: 'pages/ForwardDetailPage',
+                    params: {
+                      forward_id: seg.forwardId,
+                      content: seg.forwardContent
+                    }
+                  });
+                })
               }
             }, (_seg: MsgSegment, i: number) => i.toString())
           }
