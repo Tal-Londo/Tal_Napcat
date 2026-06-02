@@ -358,14 +358,24 @@ struct ChatDetailPage {
       for (let item of msgArr) {
         let obj = item as Record<string, Object>;
         let msgId = parseInt(String(obj['message_id'] || '0'));
-        if (msgId > 0 && existingIds.has(msgId)) {
-          continue;
-        }
-
         let rawMsg = String(obj['raw_message'] || '');
         let sender = obj['sender'] as Record<string, Object> || {};
         let senderId = parseInt(String(sender['user_id'] || '0'));
         let msgTime = parseInt(String(obj['time'] || '0')) * 1000;
+
+        if (msgId > 0 && existingIds.has(msgId)) {
+          // 服务端下发的最新数据覆盖本地（如视频链接过期等）
+          let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
+          for (let i = 0; i < newMessages.length; i++) {
+            if (newMessages[i].messageId === msgId) {
+              newMessages[i] = cm;
+              await this.chatStore.saveMessage(cm);
+              newCount++;
+              break;
+            }
+          }
+          continue;
+        }
 
         // 自己发送的消息：用 msgType|rawMessage 匹配占位（覆盖所有类型）
         if (senderId === this.selfId) {
