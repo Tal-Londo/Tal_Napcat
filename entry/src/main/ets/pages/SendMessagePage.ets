@@ -357,6 +357,7 @@ struct SendMessagePage {
   }
 
   async toggleRecording(): Promise<void> {
+    RefreshLogger.getInstance().log('VOICE-TOGGLE', 'isRecording=' + this.isRecording);
     if (this.isRecording) {
       await this.stopRecording();
     } else {
@@ -365,20 +366,29 @@ struct SendMessagePage {
   }
 
   async startRecording(): Promise<void> {
+    RefreshLogger.getInstance().log('VOICE-START', 'requesting mic permission');
     // 运行时申请麦克风权限
     try {
       let ctx = this.getUIContext().getHostContext() as Context;
       let atManager = abilityAccessCtrl.createAtManager();
-      let grantStatus = await atManager.checkAccessToken(
-        ctx.applicationInfo.accessTokenId, 'ohos.permission.MICROPHONE');
+      let tokenId = ctx.applicationInfo.accessTokenId;
+      RefreshLogger.getInstance().log('VOICE-PERM', 'tokenId=' + tokenId);
+      let grantStatus = await atManager.checkAccessToken(tokenId, 'ohos.permission.MICROPHONE');
+      RefreshLogger.getInstance().log('VOICE-PERM-CHK', 'grantStatus=' + grantStatus);
       if (grantStatus !== abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) {
+        RefreshLogger.getInstance().log('VOICE-PERM-REQ', 'requesting user permission');
         await atManager.requestPermissionsFromUser(ctx, ['ohos.permission.MICROPHONE']);
+        // 重新检查
+        grantStatus = await atManager.checkAccessToken(tokenId, 'ohos.permission.MICROPHONE');
+        RefreshLogger.getInstance().log('VOICE-PERM-REQ2', 'after request grantStatus=' + grantStatus);
       }
-    } catch (_e) {
+    } catch (e) {
+      RefreshLogger.getInstance().log('VOICE-PERM-ERR', 'permission error: ' + (e as Error).message);
     }
     try {
       let ctx = this.getUIContext().getHostContext() as Context;
       let filePath = ctx.cacheDir + '/voice_' + Date.now() + '.m4a';
+      RefreshLogger.getInstance().log('VOICE-REC', 'creating AVRecorder path=' + filePath);
 
       this.avRecorder = await media.createAVRecorder();
       let audioConfig: media.AVRecorderProfile = {
@@ -388,41 +398,54 @@ struct SendMessagePage {
         audioSampleRate: 16000,
         fileFormat: media.ContainerFormatType.CFT_MPEG_4A,
       };
+      RefreshLogger.getInstance().log('VOICE-REC', 'preparing with config: br=48000 ch=1 sr=16000 fmt=MPEG_4A');
       await this.avRecorder.prepare({
         audioSourceType: media.AudioSourceType.AUDIO_SOURCE_TYPE_MIC,
         profile: audioConfig,
         url: 'file://' + filePath,
       });
+      RefreshLogger.getInstance().log('VOICE-REC', 'prepared OK, starting');
       await this.avRecorder.start();
       this.isRecording = true;
       this.recordedFilePath = filePath;
-    } catch (_e) {
+      RefreshLogger.getInstance().log('VOICE-REC-OK', 'recording started path=' + filePath);
+    } catch (e) {
+      RefreshLogger.getInstance().log('VOICE-REC-ERR', 'recorder error: ' + (e as Error).message);
       this.isRecording = false;
     }
   }
 
   async stopRecording(): Promise<void> {
+    RefreshLogger.getInstance().log('VOICE-STOP', 'stopping recorder');
     this.isRecording = false;
     if (this.avRecorder !== null) {
       try {
         await this.avRecorder.stop();
+        RefreshLogger.getInstance().log('VOICE-STOP-1', 'recorder stopped');
         await this.avRecorder.release();
-      } catch (_e) {
+        RefreshLogger.getInstance().log('VOICE-STOP-2', 'recorder released');
+      } catch (e) {
+        RefreshLogger.getInstance().log('VOICE-STOP-ERR', 'stop error: ' + (e as Error).message);
       }
       this.avRecorder = null;
     }
     // 录制完成后自动发送
     if (this.recordedFilePath !== '') {
-      this.sendVoice();
+      RefreshLogger.getInstance().log('VOICE-STOP-SEND', 'auto sending file=' + this.recordedFilePath);
+      await this.sendVoice();
+    } else {
+      RefreshLogger.getInstance().log('VOICE-STOP-NOFILE', 'no file recorded');
     }
   }
 
   async sendVoice(): Promise<void> {
     // 读取录音文件，base64 编码后通过 data.file 发送
     // OneBot v11 标准：data.file 支持 base64:// 前缀
+    RefreshLogger.getInstance().log('VOICE-SEND-READ', 'reading file=' + this.recordedFilePath);
     let sendFile = '';
     try {
       let stat = fileIo.statSync(this.recordedFilePath);
+      RefreshLogger.getInstance().log('VOICE-SEND-STAT', 'size=' + stat.size);
       if (stat.size > 0 && stat.size < 1024 * 1024) {
         let file = fileIo.openSync(this.recordedFilePath, fileIo.OpenMode.READ_ONLY);
         let buf = new ArrayBuffer(stat.size);
@@ -430,8 +453,12 @@ struct SendMessagePage {
         fileIo.closeSync(file);
         let base64Helper = new util.Base64Helper();
         sendFile = 'base64://' + base64Helper.encodeToStringSync(new Uint8Array(buf));
+        RefreshLogger.getInstance().log('VOICE-SEND-B64', 'encoded size=' + sendFile.length);
+      } else {
+        RefreshLogger.getInstance().log('VOICE-SEND-SIZE', 'invalid size or too large');
       }
-    } catch (_e) {
+    } catch (e) {
+      RefreshLogger.getInstance().log('VOICE-SEND-READ-ERR', 'read error: ' + (e as Error).message);
     }
     if (sendFile === '') {
       RefreshLogger.getInstance().log('VOICE-SEND-ERR', 'failed to read/encode voice file');
@@ -450,9 +477,13 @@ struct SendMessagePage {
     this.sending = true;
     this.wsManager.sendRequestWithCallback(req, (data: Record<string, Object>) => {
       let retcode = data['retcode'] as number ?? 1;
+      RefreshLogger.getInstance().log('VOICE-SEND-CB', 'retcode=' + retcode);
       if (retcode === 0) {
         this.sent = true;
         router.back();
+      } else {
+        this.sending = false;
+        RefreshLogger.getInstance().log('VOICE-SEND-FAIL', 'send voice failed retcode=' + retcode);
       }
     });
   }
