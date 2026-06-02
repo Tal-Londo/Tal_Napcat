@@ -107,8 +107,7 @@ struct ChatDetailPage {
     // 所有负 messageId 的占位消息如果没有对应的服务端消息就保留
     let deduped: CachedMessage[] = [];
     let seenIds: Set<number> = new Set();
-    let selfTexts: Record<string, number> = {}; // rawMessage -> index of real self-sent msg
-    let placeholderIndexes: number[] = [];
+    let selfKeys: Record<string, number> = {}; // "msgType|rawMessage" -> index of real self msg
 
     // 第一遍：收集服务端下发的自己发送的消息
     for (let cm of cached) {
@@ -126,28 +125,25 @@ struct ChatDetailPage {
         } else {
           seenIds.add(cm.messageId);
           deduped.push(cm);
-          if (cm.isSelf && cm.msgType === 'text' && cm.rawMessage !== '') {
-            selfTexts[cm.rawMessage] = deduped.length - 1;
+          // 用 msgType+rawMessage 作为复合 key，避免 [语音] 等通用文本误匹配
+          if (cm.isSelf && cm.rawMessage !== '') {
+            let key = cm.msgType + '|' + cm.rawMessage;
+            selfKeys[key] = deduped.length - 1;
           }
         }
       }
     }
 
-    // 第二遍：处理占位消息
+    // 第二遍：处理占位消息 — 用复合 key 匹配
     for (let cm of cached) {
       if (cm.messageId > 0) { continue; }
       cm.isSelf = cm.userId === this.selfId;
-      // 补齐旧版占位的 userId/nickname
       if (cm.isSelf && cm.userId === 0) {
         cm.userId = this.selfId;
         cm.nickname = '我';
       }
-      // 如果服务端已经有相同内容的真实消息，删除占位
-      let realIdx = selfTexts[cm.rawMessage];
-      if (realIdx !== undefined) {
-        // 服务端消息已存在 → 跳过占位
-        continue;
-      }
+      let key = cm.msgType + '|' + cm.rawMessage;
+      if (selfKeys[key] !== undefined) { continue; }
       deduped.push(cm);
     }
     deduped.sort((a, b) => a.timestamp - b.timestamp);
@@ -371,13 +367,18 @@ struct ChatDetailPage {
         let senderId = parseInt(String(sender['user_id'] || '0'));
         let msgTime = parseInt(String(obj['time'] || '0')) * 1000;
 
-        // 自己发送的消息：删除内容相同的占位消息，用服务端数据替换
+        // 自己发送的消息：用 msgType|rawMessage 匹配占位（覆盖所有类型）
         if (senderId === this.selfId) {
+          let cmType: string = 'text';
+          let msgSegs = obj['message'] as Object[];
+          if (msgSegs && msgSegs.length > 0) {
+            cmType = (msgSegs[0] as Record<string, Object>)['type'] as string || 'text';
+          }
           let filtered: CachedMessage[] = [];
           let replaced = false;
           for (let m of newMessages) {
             if (m.messageId < 0 && m.isSelf &&
-                m.msgType === 'text' && m.rawMessage === rawMsg) {
+                m.msgType === cmType && m.rawMessage === rawMsg) {
               await this.chatStore.deleteMessageByMsgId(m.messageId);
               replaced = true;
             } else {
@@ -574,10 +575,11 @@ struct ChatDetailPage {
     let cached: CachedMessage[] = await this.chatStore.getMessages(this.chatId, 100);
     let deduped: CachedMessage[] = [];
     let seenIds: Set<number> = new Set();
-    let selfTexts: Record<string, number> = {};
+    let selfKeys: Record<string, number> = {};
+    const selfId = this.selfId;
 
     for (let cm of cached) {
-      cm.isSelf = cm.userId === this.selfId;
+      cm.isSelf = cm.userId === selfId;
       if (cm.messageId > 0) {
         if (seenIds.has(cm.messageId)) {
           for (let i = 0; i < deduped.length; i++) {
@@ -591,8 +593,8 @@ struct ChatDetailPage {
         } else {
           seenIds.add(cm.messageId);
           deduped.push(cm);
-          if (cm.isSelf && cm.msgType === 'text' && cm.rawMessage !== '') {
-            selfTexts[cm.rawMessage] = deduped.length - 1;
+          if (cm.isSelf && cm.rawMessage !== '') {
+            selfKeys[cm.msgType + '|' + cm.rawMessage] = deduped.length - 1;
           }
         }
       }
@@ -600,12 +602,12 @@ struct ChatDetailPage {
 
     for (let cm of cached) {
       if (cm.messageId > 0) { continue; }
-      cm.isSelf = cm.userId === this.selfId;
+      cm.isSelf = cm.userId === selfId;
       if (cm.isSelf && cm.userId === 0) {
-        cm.userId = this.selfId;
+        cm.userId = selfId;
         cm.nickname = '我';
       }
-      if (selfTexts[cm.rawMessage] !== undefined) { continue; }
+      if (selfKeys[cm.msgType + '|' + cm.rawMessage] !== undefined) { continue; }
       deduped.push(cm);
     }
     deduped.sort((a, b) => a.timestamp - b.timestamp);

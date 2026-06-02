@@ -15,6 +15,7 @@ class MsgSegment {
   type: string = 'text';
   text: string = '';
   url: string = '';
+  subType: number = 0;  // 0=normal, 1=animated sticker
   cachedPath: string = '';
   qq: string = '';
   faceId: string = '';
@@ -269,6 +270,7 @@ export struct MsgBubble {
             s.cachedPath = cache.getPath(key);
           }
           s.qq = data['qq'] as string || '';
+          s.subType = parseInt(String(data['sub_type'] || '0')) || 0;
           s.faceId = data['id'] as string || '';
           s.fileName = data['name'] as string || '';
           s.replyId = data['id'] as string || '';
@@ -588,7 +590,19 @@ export struct MsgBubble {
                   .wordBreak(WordBreak.BREAK_ALL)
               }
               if (seg.type === 'image') {
-                if (seg.url !== '') {
+                if (seg.subType === 1 && seg.url !== '') {
+                  // 动图表情（sub_type=1）用 apngV2 动画渲染
+                  apngV2({
+                    src: seg.url,
+                    speedRate: 1,
+                    apngWidth: 120,
+                    apngHeight: 120
+                  })
+                    .width(120)
+                    .height(120)
+                    .borderRadius(8)
+                    .margin({ top: 2, bottom: 2 })
+                } else if (seg.url !== '') {
                   if (seg.cachedPath !== '') {
                     Image('file://' + seg.cachedPath)
                       .width(120)
