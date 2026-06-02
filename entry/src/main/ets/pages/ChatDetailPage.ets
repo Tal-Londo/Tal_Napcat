@@ -986,7 +986,7 @@ struct ChatDetailPage {
         .defaultFocus(true)
         .groupDefaultFocus(true)
         .id('chatArcList')
-        .scrollBar(BarState.Off)
+        .scrollBar(BarState.Auto)
         .space(LengthMetrics.vp(0))
         .onSizeChange((oldValue: SizeOptions, newValue: SizeOptions) => {
           let oldHeight = oldValue.height, newHeight = newValue.height;

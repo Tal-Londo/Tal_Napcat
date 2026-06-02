@@ -148,7 +148,7 @@ struct EditServerPage {
     .width('100%')
     .height('100%')
     .scrollable(ScrollDirection.Vertical)
-    .scrollBar(BarState.Off)
+    .scrollBar(BarState.Auto)
   }
 
   validateUrl(url: string): string {

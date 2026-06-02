@@ -1,4 +1,4 @@
-import { router } from '@kit.ArkUI';
+import { ArcList, ArcListItem, LengthMetrics, router } from '@kit.ArkUI';
 import { ChatStore, GroupMember, ChatItem, ContactItem } from '../model/ChatStore';
 import { OneBotRequest } from '../model/OneBotModel';
 import { WebSocketManager } from '../model/WebSocketManager';
@@ -224,102 +224,142 @@ struct ProfilePage {
   }
 
   build() {
-    Column() {
-      // 头像
-      Stack({ alignContent: Alignment.Center }) {
-        Circle()
-          .width(60)
-          .height(60)
-          .fill(this.avatarColor)
-        Text(this.avatarInitial)
-          .fontSize(24)
-          .fontColor(Color.White)
-        Image(this.avatarUrl)
-          .width(60)
-          .height(60)
-          .borderRadius(30)
-          .objectFit(ImageFit.Cover)
+    ArcList() {
+      // 头像区域
+      ArcListItem() {
+        Stack({ alignContent: Alignment.Center }) {
+          Circle()
+            .width(60)
+            .height(60)
+            .fill(this.avatarColor)
+          Text(this.avatarInitial)
+            .fontSize(24)
+            .fontColor(Color.White)
+          Image(this.avatarUrl)
+            .width(60)
+            .height(60)
+            .borderRadius(30)
+            .objectFit(ImageFit.Cover)
+        }
+        .width(60)
+        .height(60)
+        .margin({ top: 10, bottom: 6 })
       }
-      .width(60)
-      .height(60)
-      .margin({ top: 16, bottom: 10 })
+      .width('82%')
 
       // 标题
-      Text(this.title)
-        .fontSize(18)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .maxLines(1)
-        .textAlign(TextAlign.Center)
-
-      Text(this.subtitle)
-        .fontSize(12)
-        .fontColor('#888888')
-        .margin({ top: 4, bottom: 16 })
-
-      // 字段列表
-      if (this.fields.length > 0) {
+      ArcListItem() {
         Column() {
-          ForEach(this.fields, (f: ProfileField) => {
-            Row() {
-              Text(f.label)
-                .fontSize(13)
-                .fontColor('#888888')
-                .width('35%')
-              Text(f.value)
-                .fontSize(13)
-                .fontColor(Color.White)
-                .layoutWeight(1)
-                .textAlign(TextAlign.End)
-            }
-            .width('100%')
-            .padding({ top: 8, bottom: 8 })
-          }, (f: ProfileField) => f.label)
-        }
-        .width('80%')
-        .padding({ top: 6, bottom: 6 })
-        .borderRadius(10)
-        .backgroundColor('#1a1a1a')
-      }
-
-      if (this.loading) {
-        LoadingProgress()
-          .width(30)
-          .height(30)
-          .color('#C0B8E0')
-          .margin({ top: 12 })
-      }
-
-      Blank()
-
-      // 免打扰开关 (仅私聊和群聊)
-      if (this.params.type === 'private' || this.params.type === 'group') {
-        Row() {
-          Text('免打扰')
-            .fontSize(13)
+          Text(this.title)
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
             .fontColor(Color.White)
-            .margin({ right: 8 })
-          Toggle({ type: ToggleType.Switch, isOn: this.isMuted })
-            .onChange((value: boolean) => {
-              this.isMuted = value;
-              this.toggleMute();
-            })
+            .maxLines(1)
+            .textAlign(TextAlign.Center)
+          Text(this.subtitle)
+            .fontSize(12)
+            .fontColor('#888888')
+            .margin({ top: 4 })
         }
-        .width('80%')
-        .padding({ top: 12, bottom: 12 })
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+        .padding({ bottom: 10 })
+      }
+      .width('82%')
+
+      // 加载
+      if (this.loading) {
+        ArcListItem() {
+          Column() {
+            LoadingProgress()
+              .width(30)
+              .height(30)
+              .color('#C0B8E0')
+            Text('加载中...')
+              .fontSize(12)
+              .fontColor('#666666')
+              .margin({ top: 8 })
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Center)
+          .padding({ top: 12, bottom: 12 })
+        }
+        .width('82%')
       }
 
-      // 返回按钮
-      Button('关闭')
-        .fontSize(13)
-        .fontColor('#AAAAAA')
-        .backgroundColor(Color.Transparent)
-        .margin({ top: 8, bottom: 16 })
-        .onClick(() => { router.back(); })
+      // 字段
+      if (this.fields.length > 0) {
+        ArcListItem() {
+          Column() {
+            ForEach(this.fields, (f: ProfileField) => {
+              Row() {
+                Text(f.label)
+                  .fontSize(13)
+                  .fontColor('#888888')
+                  .width('35%')
+                Text(f.value)
+                  .fontSize(13)
+                  .fontColor(Color.White)
+                  .layoutWeight(1)
+                  .textAlign(TextAlign.End)
+              }
+              .width('100%')
+              .padding({ top: 7, bottom: 7 })
+            }, (f: ProfileField) => f.label)
+          }
+          .width('100%')
+          .padding({ top: 6, bottom: 6, left: 12, right: 12 })
+          .borderRadius(10)
+          .backgroundColor('#1a1a1a')
+        }
+        .width('82%')
+        .margin({ bottom: 8 })
+      }
+
+      // 免打扰
+      if (this.params.type === 'private' || this.params.type === 'group') {
+        ArcListItem() {
+          Row() {
+            Text('免打扰')
+              .fontSize(13)
+              .fontColor(Color.White)
+              .margin({ right: 8 })
+            Toggle({ type: ToggleType.Switch, isOn: this.isMuted })
+              .onChange((value: boolean) => {
+                this.isMuted = value;
+                this.toggleMute();
+              })
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.Center)
+          .padding({ top: 10, bottom: 10 })
+        }
+        .width('82%')
+      }
+
+      // 关闭
+      ArcListItem() {
+        Text('关闭')
+          .fontSize(13)
+          .fontColor('#AAAAAA')
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ top: 10, bottom: 10 })
+          .onClick(() => { router.back(); })
+      }
+      .width('82%')
     }
     .width('100%')
     .height('100%')
+    .space(LengthMetrics.vp(4))
+    .focusable(true)
+    .focusOnTouch(true)
+    .defaultFocus(true)
+    .groupDefaultFocus(true)
+    .id('profileArcList')
+    .scrollBar(BarState.Auto)
     .backgroundColor(Color.Black)
+    .padding({ left: 12, right: 12 })
   }
 }
 

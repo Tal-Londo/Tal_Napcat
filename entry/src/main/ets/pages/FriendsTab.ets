@@ -162,7 +162,7 @@ export struct FriendsTab {
     .height('100%')
     .backgroundColor(Color.Black)
     .space(LengthMetrics.vp(0))
-    .scrollBar(BarState.Off)
+    .scrollBar(BarState.Auto)
     .padding({ left: 12, right: 12, top: 4, bottom: 4 })
   }
 }

@@ -537,7 +537,7 @@ struct SendMessagePage {
             }
             .width('100%')
             .height(150)
-            .scrollBar(BarState.Off)
+            .scrollBar(BarState.Auto)
           }
           .width('76%')
           .backgroundColor('#1a1a1a')
@@ -585,7 +585,7 @@ struct SendMessagePage {
             .columnsGap(4)
             .width('100%')
             .height(160)
-            .scrollBar(BarState.Off)
+            .scrollBar(BarState.Auto)
           }
           .width('76%')
           .backgroundColor('#1a1a1a')

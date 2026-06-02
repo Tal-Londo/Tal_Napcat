@@ -1,4 +1,4 @@
-import { router } from '@kit.ArkUI';
+import { ArcList, ArcListItem, LengthMetrics, router } from '@kit.ArkUI';
 import { ChatStore, CachedMessage } from '../model/ChatStore';
 import { OneBotRequest } from '../model/OneBotModel';
 import { WebSocketManager } from '../model/WebSocketManager';
@@ -15,7 +15,6 @@ class FwdSubMsg {
 @Component
 struct ForwardDetailPage {
   private wsManager: WebSocketManager = WebSocketManager.getInstance();
-  @State title: string = '合并转发';
   @State subCount: number = 0;
   @State items: FwdSubMsg[] = [];
   @State loading: boolean = true;
@@ -29,7 +28,6 @@ struct ForwardDetailPage {
       this.forwardId = params['forward_id'] as string || '';
       this.contentRaw = params['content'] as string || '';
     }
-    // 优先用内嵌 content 解析
     if (this.contentRaw !== '') {
       this.parseContent(this.contentRaw);
     } else if (this.forwardId !== '') {
@@ -90,27 +88,17 @@ struct ForwardDetailPage {
       if (segs !== undefined) {
         for (let seg of segs) {
           let s = seg as Record<string, Object>;
-          let t = s['type'] as string || '';
-          let d = s['data'] as Record<string, Object> || {};
-          if (t === 'text') {
-            fm.segments.push((d['text'] as string) || '');
-          } else if (t === 'image') {
-            fm.segments.push('[图片]');
-          } else if (t === 'face') {
-            fm.segments.push('[表情]');
-          } else if (t === 'at') {
-            fm.segments.push('@' + (d['qq'] || ''));
-          } else if (t === 'record') {
-            fm.segments.push('[语音]');
-          } else if (t === 'video') {
-            fm.segments.push('[视频]');
-          } else if (t === 'file') {
-            fm.segments.push('[文件]');
-          } else if (t === 'reply') {
-            fm.segments.push('[回复]');
-          } else if (t === 'forward') {
-            fm.segments.push('[聊天记录]');
-          }
+          let segType = s['type'] as string || '';
+          let segData = s['data'] as Record<string, Object> || {};
+          if (segType === 'text') { fm.segments.push((segData['text'] as string) || ''); }
+          else if (segType === 'image') { fm.segments.push('[图片]'); }
+          else if (segType === 'face') { fm.segments.push('[表情]'); }
+          else if (segType === 'at') { fm.segments.push('@' + (segData['qq'] || '')); }
+          else if (segType === 'record') { fm.segments.push('[语音]'); }
+          else if (segType === 'video') { fm.segments.push('[视频]'); }
+          else if (segType === 'file') { fm.segments.push('[文件]'); }
+          else if (segType === 'reply') { fm.segments.push('[回复]'); }
+          else if (segType === 'forward') { fm.segments.push('[聊天记录]'); }
         }
       }
       result.push(fm);
@@ -121,90 +109,112 @@ struct ForwardDetailPage {
   }
 
   build() {
-    Column() {
-      Row() {
-        Text('合并转发 (' + this.subCount + '条)')
-          .fontSize(14)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Color.White)
-          .layoutWeight(1)
-        Text('关闭')
-          .fontSize(12)
-          .fontColor('#C0B8E0')
-          .onClick(() => { router.back(); })
+    ArcList() {
+      // 标题
+      ArcListItem() {
+        Row() {
+          Text('合并转发 (' + this.subCount + '条)')
+            .fontSize(14)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .layoutWeight(1)
+          Text('关闭')
+            .fontSize(12)
+            .fontColor('#C0B8E0')
+            .onClick(() => { router.back(); })
+        }
+        .width('100%')
+        .padding({ top: 10, bottom: 10 })
       }
-      .width('90%')
-      .padding({ top: 10, bottom: 10 })
+      .width('82%')
 
+      // 加载/错误
       if (this.loading) {
-        LoadingProgress()
-          .width(30)
-          .height(30)
-          .color('#C0B8E0')
-          .margin({ top: 20 })
-        Text('加载中...')
-          .fontSize(12)
-          .fontColor('#888888')
-          .margin({ top: 8 })
+        ArcListItem() {
+          Column() {
+            LoadingProgress()
+              .width(30)
+              .height(30)
+              .color('#C0B8E0')
+            Text('加载中...')
+              .fontSize(12)
+              .fontColor('#666666')
+              .margin({ top: 8 })
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Center)
+          .padding({ top: 20, bottom: 20 })
+        }
+        .width('82%')
       }
 
       if (this.error !== '') {
-        Text(this.error)
-          .fontSize(13)
-          .fontColor('#FF6666')
-          .margin({ top: 20 })
-        Button('重试')
-          .margin({ top: 10 })
-          .fontSize(12)
-          .fontColor('#C0B8E0')
-          .onClick(() => {
-            this.loading = true;
-            this.error = '';
-            this.fetchForward();
-          })
-      }
-
-      if (this.items.length > 0) {
-        List() {
-          ForEach(this.items, (fm: FwdSubMsg, i: number) => {
-            ListItem() {
-              Column() {
-                Row() {
-                  Text(fm.senderName)
-                    .fontSize(12)
-                    .fontColor('#C0B8E0')
-                    .maxLines(1)
-                  Blank()
-                  Text(fm.timeStr)
-                    .fontSize(10)
-                    .fontColor('#666666')
-                }
-                .width('100%')
-
-                Text(fm.segments.join(''))
-                  .fontSize(13)
-                  .fontColor('#CCCCCC')
-                  .wordBreak(WordBreak.BREAK_ALL)
-                  .margin({ top: 4 })
-              }
-              .width('100%')
-              .padding({ top: 8, bottom: 8, left: 6, right: 6 })
-              .borderRadius(8)
-              .backgroundColor('#1a1a1a')
-            }
-            .width('88%')
-            .margin({ bottom: 6 })
-          }, (_fm: FwdSubMsg, i: number) => i.toString())
+        ArcListItem() {
+          Column() {
+            Text(this.error)
+              .fontSize(13)
+              .fontColor('#FF6666')
+            Button('重试')
+              .margin({ top: 8 })
+              .fontSize(12)
+              .fontColor('#C0B8E0')
+              .backgroundColor('#2a2a2a')
+              .height(30)
+              .borderRadius(15)
+              .onClick(() => {
+                this.loading = true;
+                this.error = '';
+                this.fetchForward();
+              })
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Center)
+          .padding({ top: 12, bottom: 12 })
         }
-        .width('100%')
-        .layoutWeight(1)
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
-        .padding({ left: 6, right: 6 })
+        .width('82%')
       }
+
+      // 消息列表
+      ForEach(this.items, (fm: FwdSubMsg, i: number) => {
+        ArcListItem() {
+          Column() {
+            Row() {
+              Text(fm.senderName)
+                .fontSize(12)
+                .fontColor('#C0B8E0')
+                .maxLines(1)
+              Blank()
+              Text(fm.timeStr)
+                .fontSize(10)
+                .fontColor('#666666')
+            }
+            .width('100%')
+
+            Text(fm.segments.join(''))
+              .fontSize(13)
+              .fontColor('#CCCCCC')
+              .wordBreak(WordBreak.BREAK_ALL)
+              .margin({ top: 4 })
+          }
+          .width('100%')
+          .padding({ top: 8, bottom: 8, left: 10, right: 10 })
+          .borderRadius(10)
+          .backgroundColor('#1a1a1a')
+        }
+        .width('82%')
+        .margin({ bottom: 6 })
+      }, (_fm: FwdSubMsg, i: number) => i.toString())
     }
     .width('100%')
     .height('100%')
+    .space(LengthMetrics.vp(4))
+    .focusable(true)
+    .focusOnTouch(true)
+    .defaultFocus(true)
+    .groupDefaultFocus(true)
+    .id('forwardArcList')
+    .scrollBar(BarState.Auto)
     .backgroundColor(Color.Black)
+    .padding({ left: 12, right: 12 })
   }
 }
