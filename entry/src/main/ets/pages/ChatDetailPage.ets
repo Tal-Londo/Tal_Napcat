@@ -36,8 +36,10 @@ struct ChatDetailPage {
   @State inputText: string = '';
   @State title: string = '';
   @State loading: boolean = true;
+  @State loadingMore: boolean = false;
   @State menuMsg: CachedMessage | null = null;
   @State flashMsgId: number = 0;
+  private hasMore: boolean = true;
   private myRole: string = '';
   private myTitle: string = '';
   private shutUpUntil: number = 0;
@@ -643,6 +645,75 @@ struct ChatDetailPage {
     }, 100);
   }
 
+  loadMoreHistory(): void {
+    if (this.loadingMore || !this.hasMore || this.messages.length === 0) {
+      return;
+    }
+    this.loadingMore = true;
+    RefreshLogger.getInstance().log('CDP-MORE', 'loading older messages, current count=' + this.messages.length);
+    // 用最旧消息的 messageId 作为锚点，拉取上一页
+    let anchorId = this.messages[0].messageId;
+    if (anchorId <= 0) {
+      // 跳过占位消息取下一个
+      for (let i = 1; i < this.messages.length; i++) {
+        if (this.messages[i].messageId > 0) { anchorId = this.messages[i].messageId; break; }
+      }
+    }
+    let req: OneBotRequest = OneBotRequest.createGetMsgHistory(
+      this.peerId, this.chatType, undefined, 20);
+    // 传入 message_seq 拉取更早的消息
+    req.params['message_seq'] = anchorId;
+    req.params['message_id'] = anchorId;
+    this.wsManager.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+      this.handleMoreHistory(data);
+    });
+  }
+
+  async handleMoreHistory(data: Record<string, Object>): Promise<void> {
+    try {
+      let retcode = data['retcode'] as number ?? 1;
+      if (retcode !== 0) { this.loadingMore = false; return; }
+      let payload = data['data'] as Record<string, Object>;
+      if (payload === undefined) { this.loadingMore = false; return; }
+      let msgArr = payload['messages'] as Object[];
+      if (msgArr === undefined || msgArr.length === 0) {
+        this.hasMore = false;
+        this.loadingMore = false;
+        RefreshLogger.getInstance().log('CDP-MORE', 'no more messages');
+        return;
+      }
+      let existingIds: Set<number> = new Set();
+      for (let m of this.messages) { if (m.messageId > 0) { existingIds.add(m.messageId); } }
+      let newMsgs: CachedMessage[] = [];
+      for (let item of msgArr) {
+        let obj = item as Record<string, Object>;
+        let msgId = parseInt(String(obj['message_id'] || '0'));
+        if (msgId > 0 && existingIds.has(msgId)) { continue; }
+        existingIds.add(msgId);
+        let rawMsg = String(obj['raw_message'] || '');
+        let sender = obj['sender'] as Record<string, Object> || {};
+        let msgTime = parseInt(String(obj['time'] || '0')) * 1000;
+        let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
+        this.fillSenderRole(cm);
+        await this.chatStore.saveMessage(cm);
+        newMsgs.push(cm);
+      }
+      if (newMsgs.length > 0) {
+        newMsgs.sort((a, b) => a.timestamp - b.timestamp);
+        this.messages = [...newMsgs, ...this.messages];
+        this.messagesDataSource.setMessages(this.messages);
+        this.messagesDataSource.notifyDataReload();
+        this.requestArcListFocus();
+        RefreshLogger.getInstance().log('CDP-MORE', 'loaded ' + newMsgs.length + ' older messages, total=' + this.messages.length);
+      } else {
+        this.hasMore = false;
+      }
+    } catch (e) {
+      RefreshLogger.getInstance().log('CDP-MORE-ERR', 'error: ' + (e as Error).message);
+    }
+    this.loadingMore = false;
+  }
+
   scrollToBottom(): void {
     setTimeout(() => {
       this.scrollScroller.scrollEdge(Edge.Bottom);
@@ -948,6 +1019,33 @@ struct ChatDetailPage {
       Column() {
         // 消息 ArcList
         ArcList({ scroller: this.scrollScroller }) {
+          // 顶部：加载更多指示器
+          if (!this.loading && this.messages.length > 0 && this.hasMore) {
+            ArcListItem() {
+              Column() {
+                if (this.loadingMore) {
+                  LoadingProgress()
+                    .width(20)
+                    .height(20)
+                    .color('#C0B8E0')
+                  Text('加载中...')
+                    .fontSize(11)
+                    .fontColor('#888888')
+                    .margin({ top: 4 })
+                } else {
+                  Text('上滑加载更早消息')
+                    .fontSize(11)
+                    .fontColor('#666666')
+                }
+              }
+              .width('100%')
+              .alignItems(HorizontalAlign.Center)
+              .padding({ top: 8, bottom: 8 })
+            }
+            .width('82%')
+            .onClick(() => { this.loadMoreHistory(); })
+          }
+
           if (this.loading) {
             ArcListItem() {
               Column() {
