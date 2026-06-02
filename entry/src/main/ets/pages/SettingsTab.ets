@@ -156,15 +156,6 @@ export struct SettingsTab {
         .height(36)
         .borderRadius(8)
         .onClick(() => { router.pushUrl({ url: 'pages/EditServerPage', params: { 'url': server.url } }); })
-
-      Button('删除')
-        .fontSize(12)
-        .fontColor('#FF6666')
-        .backgroundColor(Color.Transparent)
-        .width(40)
-        .height(36)
-        .borderRadius(8)
-        .onClick(() => { this.deleteServer(server); })
     }
     .padding(6)
     .justifyContent(FlexAlign.Center)
