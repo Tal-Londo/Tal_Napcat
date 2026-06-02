@@ -274,12 +274,19 @@ export struct MsgBubble {
           s.replyId = data['id'] as string || '';
           if (s.type === 'record') {
             s.recordFile = data['file'] as string || '';
-            // 优先使用 data.url 直接播放
             s.url = data['url'] as string || '';
+            // 缓存语音 base64 结果（避免重复请求 get_record）
+            s.cachedPath = this.getVoiceCache(s.recordFile);
           }
           if (s.type === 'video') {
             s.videoFile = data['file'] as string || data['url'] as string || '';
             s.videoThumb = data['thumb'] as string || '';
+            // 缩略图尝试从缓存加载
+            if (s.videoThumb !== '' && s.videoThumb.startsWith('http')) {
+              let cache = CacheManager.getInstance();
+              let key = cache.makeKey(s.videoThumb, CacheType.IMAGE);
+              s.cachedPath = cache.getPath(key);
+            }
           }
           if (s.type === 'forward') {
             s.forwardId = data['id'] as string || '';
@@ -299,6 +306,21 @@ export struct MsgBubble {
     return result;
   }
 
+  getVoiceCache(fileUuid: string): string {
+    if (fileUuid === '') { return ''; }
+    let cache = CacheManager.getInstance();
+    let key = cache.makeKey(fileUuid, CacheType.STICKER);
+    return cache.getPath(key);
+  }
+
+  saveVoiceCache(fileUuid: string, data: ArrayBuffer): void {
+    if (fileUuid === '' || data.byteLength === 0) { return; }
+    let cache = CacheManager.getInstance();
+    let key = cache.makeKey(fileUuid, CacheType.STICKER);
+    cache.save(key, CacheType.STICKER, data);
+    RefreshLogger.getInstance().log('VOICE-CACHED', 'uuid=' + fileUuid.substring(0,30) + ' size=' + data.byteLength);
+  }
+
   toggleVoicePlay(seg: MsgSegment): void {
     if (this.voicePlaying) {
       this.stopVoice();
@@ -308,13 +330,22 @@ export struct MsgBubble {
       return;
     }
     if (this.voiceFd >= 0) {
-      // 已下载并打开了 fd，继续播放
       this.doPlayFromFd(this.voiceFd);
       return;
     }
     let file = seg.recordFile;
     if (file === '') {
       RefreshLogger.getInstance().log('VOICE-NOURL', 'no recordFile');
+      return;
+    }
+    // 检查缓存
+    let cached = this.getVoiceCache(file);
+    if (cached !== '') {
+      RefreshLogger.getInstance().log('VOICE-CACHEHIT', 'cached file=' + cached.substring(0,60));
+      let fd = fileIo.openSync(cached, fileIo.OpenMode.READ_ONLY);
+      this.voiceFd = fd.fd;
+      this.voiceLoading = true;
+      this.doPlayFromFd(fd.fd);
       return;
     }
     this.voiceLoading = true;
@@ -327,7 +358,7 @@ export struct MsgBubble {
       let b64 = inner['base64'] as string || '';
       RefreshLogger.getInstance().log('VOICE-GETREC-RSP', 'rc=' + retcode + ' b64len=' + b64.length);
       if (b64 !== '') {
-        this.saveAndPlayBase64(b64);
+        this.saveAndPlayBase64(b64, file);
       } else {
         this.voiceLoading = false;
         RefreshLogger.getInstance().log('VOICE-NOPLAY', 'no base64 from get_record');
@@ -335,17 +366,19 @@ export struct MsgBubble {
     });
   }
 
-  saveAndPlayBase64(b64: string): void {
+  saveAndPlayBase64(b64: string, fileUuid?: string): void {
     try {
       let buf = buffer.from(b64, 'base64');
-      let filePath = '/data/storage/el2/base/cache/voice_' + Date.now() + '.mp3';
-      // 先写入再重新打开，因为写入 fd 和播放 fd 需要分开（AVPlayer 独占 fd）
-      let file = fileIo.openSync(filePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY);
+      let cacheFile = '/data/storage/el2/base/cache/voice_' + Date.now() + '.mp3';
+      let file = fileIo.openSync(cacheFile, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY);
       fileIo.writeSync(file.fd, buf.buffer);
       fileIo.closeSync(file);
-      RefreshLogger.getInstance().log('VOICE-SAVED', 'size=' + buf.length + ' path=' + filePath);
-      // 重新打开以获取可传给 AVPlayer 的 fd
-      let fd = fileIo.openSync(filePath, fileIo.OpenMode.READ_ONLY);
+      RefreshLogger.getInstance().log('VOICE-SAVED', 'size=' + buf.length + ' path=' + cacheFile);
+      // 写入长期缓存
+      if (fileUuid !== undefined && fileUuid !== '') {
+        this.saveVoiceCache(fileUuid, buf.buffer);
+      }
+      let fd = fileIo.openSync(cacheFile, fileIo.OpenMode.READ_ONLY);
       let fdNum = fd.fd;
       RefreshLogger.getInstance().log('VOICE-FD', 'opened fd=' + fdNum);
       this.voiceFd = fdNum;
