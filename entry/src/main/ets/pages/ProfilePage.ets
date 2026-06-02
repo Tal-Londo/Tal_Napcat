@@ -208,8 +208,10 @@ struct ProfilePage {
   }
 
   async toggleMute(): Promise<void> {
-    this.isMuted = !this.isMuted;
+    // 注意：调用时 isMuted 已是 Toggle 最终值（onChange 已更新）
+    RefreshLogger.getInstance().log('PROF-MUTE-TOGGLE', 'chatId=' + this.chatId + ' newValue=' + this.isMuted);
     let mutedJson = await this.configManager.getString('muted_chats', '[]');
+    RefreshLogger.getInstance().log('PROF-MUTE-PREV', 'prev mutedJson=' + mutedJson.substring(0, 200));
     let list: string[] = [];
     try { list = JSON.parse(mutedJson) as string[]; } catch (_e) {}
     if (this.isMuted) {
@@ -219,8 +221,11 @@ struct ProfilePage {
       for (let id of list) { if (id !== this.chatId) { newList.push(id); } }
       list = newList;
     }
-    await this.configManager.setString('muted_chats', JSON.stringify(list));
-    RefreshLogger.getInstance().log('PROF-MUTE', 'chatId=' + this.chatId + ' muted=' + this.isMuted);
+    let newJson = JSON.stringify(list);
+    await this.configManager.setString('muted_chats', newJson);
+    // 验证写入
+    let verify = await this.configManager.getString('muted_chats', '[]');
+    RefreshLogger.getInstance().log('PROF-MUTE-DONE', 'write=' + newJson.substring(0,200) + ' verify=' + verify.substring(0,200));
   }
 
   build() {
@@ -326,11 +331,9 @@ struct ProfilePage {
               .margin({ right: 8 })
             Toggle({ type: ToggleType.Switch, isOn: this.isMuted })
               .onChange((value: boolean) => {
-                // 先切状态再保存（toggle 会翻转，但 value 已经是最终值）
-                if (this.isMuted !== value) {
-                  this.isMuted = value;
-                  this.toggleMute();
-                }
+                this.isMuted = value;
+                RefreshLogger.getInstance().log('PROF-MUTE-CLICK', 'Toggle onChange value=' + value);
+                this.toggleMute();
               })
           }
           .width('100%')
