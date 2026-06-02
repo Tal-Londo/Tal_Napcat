@@ -428,6 +428,32 @@ struct ChatDetailPage {
 
       if (newCount > 0) {
         newMessages.sort((a: CachedMessage, b: CachedMessage) => a.timestamp - b.timestamp);
+
+        // 清理「上下文存在但本条缺失」的消息（已被服务端删除）
+        // 收集服务端下发的所有 positive messageId 集合
+        let serverIds: Set<number> = new Set();
+        for (let item of msgArr) {
+          let obj = item as Record<string, Object>;
+          let mid = parseInt(String(obj['message_id'] || '0'));
+          if (mid > 0) { serverIds.add(mid); }
+        }
+        // 删除：前后邻居都在服务端里但自己不在的本地消息
+        let cleaned: CachedMessage[] = [];
+        for (let i = 0; i < newMessages.length; i++) {
+          let m = newMessages[i];
+          if (m.messageId > 0 && !serverIds.has(m.messageId)) {
+            let hasPrev = i > 0 && serverIds.has(newMessages[i-1].messageId);
+            let hasNext = i < newMessages.length-1 && serverIds.has(newMessages[i+1].messageId);
+            if (hasPrev || hasNext) {
+              await this.chatStore.deleteMessageByMsgId(m.messageId);
+              RefreshLogger.getInstance().log('CDP-CLEAN', 'removed orphan msgId=' + m.messageId);
+              continue;
+            }
+          }
+          cleaned.push(m);
+        }
+        newMessages = cleaned;
+
         this.messages = newMessages;
         this.messagesDataSource.setMessages(newMessages);
         this.messagesDataSource.notifyDataReload();
@@ -713,7 +739,32 @@ struct ChatDetailPage {
       }
       if (newMsgs.length > 0) {
         newMsgs.sort((a, b) => a.timestamp - b.timestamp);
+        // 插入旧消息到列表头部
         this.messages = [...newMsgs, ...this.messages];
+
+        // 清理孤消息
+        let serverIds: Set<number> = new Set();
+        for (let item of msgArr) {
+          let obj = item as Record<string, Object>;
+          let mid = parseInt(String(obj['message_id'] || '0'));
+          if (mid > 0) { serverIds.add(mid); }
+        }
+        let allMsgs = this.messages;
+        let cleaned: CachedMessage[] = [];
+        for (let i = 0; i < allMsgs.length; i++) {
+          let m = allMsgs[i];
+          if (m.messageId > 0 && !serverIds.has(m.messageId)) {
+            let hasPrev = i > 0 && serverIds.has(allMsgs[i-1].messageId);
+            let hasNext = i < allMsgs.length-1 && serverIds.has(allMsgs[i+1].messageId);
+            if (hasPrev || hasNext) {
+              await this.chatStore.deleteMessageByMsgId(m.messageId);
+              continue;
+            }
+          }
+          cleaned.push(m);
+        }
+        this.messages = cleaned;
+
         this.messagesDataSource.setMessages(this.messages);
         this.messagesDataSource.notifyDataReload();
         this.requestArcListFocus();
