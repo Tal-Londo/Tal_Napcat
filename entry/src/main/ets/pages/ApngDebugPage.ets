@@ -2,6 +2,8 @@ import { router } from '@kit.ArkUI';
 import { apngV2, ApngController, Apng } from '@ohos/apng';
 import { RefreshLogger } from '../model/RefreshLogger';
 import emitter from '@ohos.events.emitter';
+import { fileIo } from '@kit.CoreFileKit';
+import http from '@ohos.net.http';
 
 @Entry
 @Component
@@ -25,6 +27,12 @@ struct ApngDebugPage {
   @State uint8Ready: boolean = false;
   private uint8Data: Uint8Array | undefined = undefined;
 
+  // fd:// 本地文件加载测试
+  @State fdReady: boolean = false;
+  @State fdPath: string = '';
+  @State fdResult: string = '';
+  private openFd: number = -1;
+
   aboutToAppear(): void {
     RefreshLogger.getInstance().log('APNGDBG-OPEN', 'page opened');
 
@@ -36,6 +44,47 @@ struct ApngDebugPage {
     });
 
     this.loadUint8Array();
+    this.loadFdTest();
+  }
+
+  async loadFdTest(): Promise<void> {
+    try {
+      // 下载网络 APNG 到本地缓存
+      let cachePath = '/data/storage/el2/base/cache/apng_fd_test.png';
+      let httpRequest: http.HttpRequest = http.createHttp();
+      let chunks: Array<ArrayBuffer> = new Array<ArrayBuffer>();
+      httpRequest.on('dataReceive', (data: ArrayBuffer) => { chunks.push(data); });
+      let code: number = await httpRequest.requestInStream(this.networkApng, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        connectTimeout: 30000,
+        usingCache: false
+      }).catch(() => -1) as number;
+      httpRequest.destroy();
+      if (code !== 200 || chunks.length === 0) {
+        RefreshLogger.getInstance().log('APNGDBG-FD', 'download failed code=' + code);
+        return;
+      }
+      let totalLen = 0;
+      for (let ab of chunks) { totalLen += ab.byteLength; }
+      let combined = new ArrayBuffer(totalLen);
+      let view = new Uint8Array(combined);
+      let off = 0;
+      for (let ab of chunks) { view.set(new Uint8Array(ab), off); off += ab.byteLength; }
+      let file = fileIo.openSync(cachePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE);
+      fileIo.writeSync(file.fd, combined);
+      fileIo.fsyncSync(file.fd);
+      fileIo.closeSync(file);
+      // 重新打开只读保持 fd 存活供 Image fd:// 测试
+      let roFile = fileIo.openSync(cachePath, fileIo.OpenMode.READ_ONLY);
+      this.openFd = roFile.fd;
+      this.fdPath = cachePath;
+      this.fdResult = 'size=' + totalLen + ' roFd=' + roFile.fd;
+      this.fdReady = true;
+      RefreshLogger.getInstance().log('APNGDBG-FD', 'file=' + cachePath + ' size=' + totalLen + ' fd=' + roFile.fd);
+    } catch (e) {
+      RefreshLogger.getInstance().log('APNGDBG-FDERR', 'fd test setup failed: ' + JSON.stringify(e));
+    }
   }
 
   async loadUint8Array(): Promise<void> {
@@ -217,6 +266,104 @@ struct ApngDebugPage {
               .margin({ top: 2 })
           } else {
             Text('加载 Uint8Array 中...')
+              .fontSize(10)
+              .fontColor('#888888')
+          }
+
+          SectionDivider()
+
+          // ====== 本地文件 APNG (fd:// & sandbox path) ======
+          SectionLabel({ label: '本地文件加载 (fd:// & sandbox)', color: '#7B68EE' })
+
+          if (this.fdReady) {
+            Column() {
+              Text('路径: ' + this.fdPath)
+                .fontSize(7)
+                .fontColor('#666666')
+                .width('90%')
+                .maxLines(2)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .margin({ top: 2 })
+
+              Row() {
+                // 1. apngV2 直接用 sandbox 路径
+                Column() {
+                  apngV2({
+                    src: '/data/storage/el2/base/cache/apng_fd_test.png',
+                    speedRate: 1,
+                    apngWidth: 56,
+                    apngHeight: 56,
+                    context: getContext()
+                  })
+                    .width(56)
+                    .height(56)
+                  Text('sandbox路径')
+                    .fontSize(7)
+                    .fontColor('#888888')
+                }
+                .alignItems(HorizontalAlign.Center)
+                .margin({ right: 6 })
+
+                // 2. apngV2 用 file:// 前缀
+                Column() {
+                  apngV2({
+                    src: 'file:///data/storage/el2/base/cache/apng_fd_test.png',
+                    speedRate: 1,
+                    apngWidth: 56,
+                    apngHeight: 56,
+                    context: getContext()
+                  })
+                    .width(56)
+                    .height(56)
+                  Text('file://前缀')
+                    .fontSize(7)
+                    .fontColor('#888888')
+                }
+                .alignItems(HorizontalAlign.Center)
+                .margin({ right: 6 })
+
+                // 3. 普通 Image + fd://
+                Column() {
+                  Image('fd://' + this.openFd)
+                    .width(56)
+                    .height(56)
+                    .objectFit(ImageFit.Cover)
+                  Text('Image fd://')
+                    .fontSize(7)
+                    .fontColor('#888888')
+                }
+                .alignItems(HorizontalAlign.Center)
+                .margin({ right: 6 })
+
+                // 4. apngV2 + fd://
+                Column() {
+                  apngV2({
+                    src: 'fd://' + this.openFd,
+                    speedRate: 1,
+                    apngWidth: 56,
+                    apngHeight: 56,
+                    context: getContext()
+                  })
+                    .width(56)
+                    .height(56)
+                  Text('apngV2 fd://')
+                    .fontSize(7)
+                    .fontColor('#888888')
+                }
+                .alignItems(HorizontalAlign.Center)
+              }
+              .width('90%')
+              .justifyContent(FlexAlign.Start)
+
+              Text(this.fdResult)
+                .fontSize(7)
+                .fontColor('#444444')
+                .width('90%')
+                .margin({ top: 4 })
+            }
+            .alignItems(HorizontalAlign.Center)
+          } else {
+            Text('下载本地 APNG 测试中...')
               .fontSize(10)
               .fontColor('#888888')
           }
