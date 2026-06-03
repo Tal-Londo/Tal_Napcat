@@ -49,19 +49,24 @@ struct ApngDebugPage {
   async loadFdTest(): Promise<void> {
     try {
       // 从 rawfile face/0.png 复制到缓存目录
-      let uint8 = await getContext().resourceManager.getRawFileContent('face/0.png');
+      let src = await getContext().resourceManager.getRawFileContent('face/0.png');
+      // 先复制 buffer，避免 writeSync 后原 buffer 被 detach
+      let len = src.byteLength;
+      let copyBuf = new ArrayBuffer(len);
+      let copyView = new Uint8Array(copyBuf);
+      copyView.set(new Uint8Array(src.buffer.slice(0, len)));
       let cachePath = '/data/storage/el2/base/cache/apng_fd_test.png';
       let file = fileIo.openSync(cachePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE);
-      fileIo.writeSync(file.fd, uint8.buffer);
+      fileIo.writeSync(file.fd, copyBuf);
       fileIo.fsyncSync(file.fd);
       fileIo.closeSync(file);
       // 重新打开只读保持 fd 存活供 Image fd:// 测试
       let roFile = fileIo.openSync(cachePath, fileIo.OpenMode.READ_ONLY);
       this.openFd = roFile.fd;
       this.fdPath = cachePath;
-      this.fdResult = 'rawfile face/0.png → ' + cachePath + ' size=' + uint8.byteLength + ' roFd=' + roFile.fd;
+      this.fdResult = 'rawfile face/0.png → ' + cachePath + ' size=' + len + ' roFd=' + roFile.fd;
       this.fdReady = true;
-      RefreshLogger.getInstance().log('APNGDBG-FD', 'copied face/0.png size=' + uint8.byteLength + ' fd=' + roFile.fd);
+      RefreshLogger.getInstance().log('APNGDBG-FD', 'copied face/0.png size=' + len + ' fd=' + roFile.fd);
     } catch (e) {
       RefreshLogger.getInstance().log('APNGDBG-FDERR', 'fd test setup failed: ' + JSON.stringify(e));
     }
