@@ -192,6 +192,9 @@ struct ChatDetailPage {
         this.handleGroupAllShut(data);
       });
     }
+
+    // 初始加载完成后主动预拉取全部历史消息到本地 DB
+    setTimeout(() => { this.startRemotePhase(); }, 2000);
   }
 
   fillSenderRole(cm: CachedMessage): void {
@@ -784,6 +787,11 @@ struct ChatDetailPage {
       if (msgArr.length < count) {
         this.hasGap = !hasOverlap;
         this.hasMore = false;
+        if (this.hasGap && remoteMsgs.length > 0) {
+          // 在远端消息顶部插入断层提示
+          let gapMsg = this.createGapMarker(remoteMsgs[0].timestamp);
+          remoteMsgs.unshift(gapMsg);
+        }
       }
 
       if (remoteMsgs.length > 0) {
@@ -826,6 +834,20 @@ struct ChatDetailPage {
       RefreshLogger.getInstance().log('CDP-RMT-ERR', 'phase error: ' + (e as Error).message);
       this.remotePhaseActive = false;
     }
+  }
+
+  createGapMarker(beforeTs: number): CachedMessage {
+    let gap = new CachedMessage();
+    gap.messageId = -Date.now() - Math.floor(Math.random() * 10000);
+    gap.chatId = this.chatId;
+    gap.userId = 0;
+    gap.nickname = '';
+    gap.content = '[]';
+    gap.rawMessage = '';
+    gap.msgType = 'gap';
+    gap.timestamp = beforeTs - 1;
+    gap.isSelf = false;
+    return gap;
   }
 
   scrollToBottom(): void {
@@ -1155,10 +1177,6 @@ struct ChatDetailPage {
                     .fontSize(11)
                     .fontColor('#888888')
                     .margin({ top: 4 })
-                } else if (this.hasGap) {
-                  Text('消息不完整')
-                    .fontSize(11)
-                    .fontColor('#996644')
                 } else if (!this.hasMore) {
                   Text('没有更早的消息')
                     .fontSize(11)
@@ -1215,7 +1233,29 @@ struct ChatDetailPage {
           }
 
           LazyForEach(this.messagesDataSource, (msg: CachedMessage, index: number) => {
-            ArcListItem() {
+            if (msg.msgType === 'gap') {
+              ArcListItem() {
+                Column() {
+                  Divider()
+                    .strokeWidth(0.5)
+                    .color('#996644')
+                    .width('60%')
+                  Text('消息不完整')
+                    .fontSize(10)
+                    .fontColor('#996644')
+                    .margin({ top: 4, bottom: 4 })
+                  Divider()
+                    .strokeWidth(0.5)
+                    .color('#996644')
+                    .width('60%')
+                }
+                .width('100%')
+                .alignItems(HorizontalAlign.Center)
+                .padding({ top: 8, bottom: 8 })
+              }
+              .width('89%')
+            } else {
+              ArcListItem() {
               MsgBubble({
                 msg: msg,
                 selfId: this.selfId,
@@ -1235,6 +1275,7 @@ struct ChatDetailPage {
               color: '#C0B8E0',
               radius: 8
             })
+            }
           }, (m: CachedMessage) => ChatMessagesDataSource.messageItemKey(m))
         }
         .width('100%')
@@ -1248,6 +1289,11 @@ struct ChatDetailPage {
         .defaultFocus(true)
         .groupDefaultFocus(true)
         .space(LengthMetrics.vp(0))
+        .onScrollIndex((first: number, _last: number) => {
+          if (!this.loading && !this.loadingMore && this.hasMore && first <= 2) {
+            this.loadMoreFromDB();
+          }
+        })
         .onSizeChange((oldValue: SizeOptions, newValue: SizeOptions) => {
           let oldHeight = oldValue.height, newHeight = newValue.height;
           oldHeight = (oldHeight === undefined ? 0 : oldHeight);
