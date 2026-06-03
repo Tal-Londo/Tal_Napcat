@@ -3,7 +3,6 @@ import { apngV2, ApngController, Apng } from '@ohos/apng';
 import { RefreshLogger } from '../model/RefreshLogger';
 import emitter from '@ohos.events.emitter';
 import { fileIo } from '@kit.CoreFileKit';
-import http from '@ohos.net.http';
 
 @Entry
 @Component
@@ -49,39 +48,20 @@ struct ApngDebugPage {
 
   async loadFdTest(): Promise<void> {
     try {
-      // 下载网络 APNG 到本地缓存
+      // 从 rawfile face/0.png 复制到缓存目录
+      let uint8 = await getContext().resourceManager.getRawFileContent('face/0.png');
       let cachePath = '/data/storage/el2/base/cache/apng_fd_test.png';
-      let httpRequest: http.HttpRequest = http.createHttp();
-      let chunks: Array<ArrayBuffer> = new Array<ArrayBuffer>();
-      httpRequest.on('dataReceive', (data: ArrayBuffer) => { chunks.push(data); });
-      let code: number = await httpRequest.requestInStream(this.networkApng, {
-        method: http.RequestMethod.GET,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER,
-        connectTimeout: 30000,
-        usingCache: false
-      }).catch(() => -1) as number;
-      httpRequest.destroy();
-      if (code !== 200 || chunks.length === 0) {
-        RefreshLogger.getInstance().log('APNGDBG-FD', 'download failed code=' + code);
-        return;
-      }
-      let totalLen = 0;
-      for (let ab of chunks) { totalLen += ab.byteLength; }
-      let combined = new ArrayBuffer(totalLen);
-      let view = new Uint8Array(combined);
-      let off = 0;
-      for (let ab of chunks) { view.set(new Uint8Array(ab), off); off += ab.byteLength; }
       let file = fileIo.openSync(cachePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE);
-      fileIo.writeSync(file.fd, combined);
+      fileIo.writeSync(file.fd, uint8.buffer);
       fileIo.fsyncSync(file.fd);
       fileIo.closeSync(file);
       // 重新打开只读保持 fd 存活供 Image fd:// 测试
       let roFile = fileIo.openSync(cachePath, fileIo.OpenMode.READ_ONLY);
       this.openFd = roFile.fd;
       this.fdPath = cachePath;
-      this.fdResult = 'size=' + totalLen + ' roFd=' + roFile.fd;
+      this.fdResult = 'rawfile face/0.png → ' + cachePath + ' size=' + uint8.byteLength + ' roFd=' + roFile.fd;
       this.fdReady = true;
-      RefreshLogger.getInstance().log('APNGDBG-FD', 'file=' + cachePath + ' size=' + totalLen + ' fd=' + roFile.fd);
+      RefreshLogger.getInstance().log('APNGDBG-FD', 'copied face/0.png size=' + uint8.byteLength + ' fd=' + roFile.fd);
     } catch (e) {
       RefreshLogger.getInstance().log('APNGDBG-FDERR', 'fd test setup failed: ' + JSON.stringify(e));
     }
