@@ -163,7 +163,7 @@ export class CacheManager {
       case CacheType.AVATAR:
         return '.avt';
       case CacheType.STICKER:
-        return '.stk';
+        return '.png';
       case CacheType.VIDEO:
         return '.vid';
       default:

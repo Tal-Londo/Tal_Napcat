@@ -10,6 +10,7 @@ import { media } from '@kit.MediaKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { buffer } from '@kit.ArkTS';
 import { apngV2 } from '@ohos/apng';
+import http from '@ohos.net.http';
 
 class MsgSegment {
   type: string = 'text';
@@ -41,6 +42,7 @@ export struct MsgBubble {
   onReplyTap?: (messageId: number) => void;
   @State voicePlaying: boolean = false;
   @State voiceLoading: boolean = false;
+  @State stickerCacheVersion: number = 0;
   private avPlayer: media.AVPlayer | null = null;
   private voiceFd: number = -1;
 
@@ -301,9 +303,22 @@ export struct MsgBubble {
         result.push(s);
       }
       let faceCount = 0;
-      for (let seg of result) { if (seg.type === 'face') { faceCount++; } }
+      let uncached: string[] = [];
+      for (let seg of result) {
+        if (seg.type === 'face') { faceCount++; }
+        if (seg.subType === 1 && seg.url !== '' && seg.cachedPath === '') {
+          uncached.push(seg.url);
+        }
+      }
       if (faceCount > 0) {
         RefreshLogger.getInstance().log('APNG-PARSE', 'face segments: ' + faceCount + ' of ' + result.length + ' total');
+      }
+      if (uncached.length > 0) {
+        let urls = new Array<string>(uncached.length);
+        for (let i = 0; i < uncached.length; i++) { urls[i] = uncached[i]; }
+        setTimeout(() => {
+          for (let u of urls) { this.downloadStickerToCache(u); }
+        }, 100);
       }
     } catch (_e) {
       let seg = new MsgSegment();
@@ -326,6 +341,50 @@ export struct MsgBubble {
     let key = cache.makeKey(fileUuid, CacheType.STICKER);
     cache.save(key, CacheType.STICKER, data);
     RefreshLogger.getInstance().log('VOICE-CACHED', 'uuid=' + fileUuid.substring(0,30) + ' size=' + data.byteLength);
+  }
+
+  async downloadStickerToCache(url: string): Promise<string> {
+    try {
+      let cache = CacheManager.getInstance();
+      let key = cache.makeKey(url, CacheType.STICKER);
+      let existingPath = cache.getPath(key);
+      if (existingPath !== '') {
+        return existingPath;
+      }
+      let httpRequest: http.HttpRequest = http.createHttp();
+      let chunks: Array<ArrayBuffer> = new Array<ArrayBuffer>();
+      httpRequest.on('dataReceive', (data: ArrayBuffer) => {
+        chunks.push(data);
+      });
+      let resultCode: number = await httpRequest.requestInStream(url, {
+        method: http.RequestMethod.GET,
+        expectDataType: http.HttpDataType.ARRAY_BUFFER,
+        connectTimeout: 30000,
+        usingCache: false
+      }).catch((_err: Error) => {
+        httpRequest.destroy();
+        return -1;
+      }) as number;
+      httpRequest.destroy();
+      if (resultCode !== 200 || chunks.length === 0) {
+        return '';
+      }
+      let totalLen = 0;
+      for (let ab of chunks) { totalLen += ab.byteLength; }
+      let combined = new ArrayBuffer(totalLen);
+      let view = new Uint8Array(combined);
+      let offset = 0;
+      for (let ab of chunks) {
+        view.set(new Uint8Array(ab), offset);
+        offset += ab.byteLength;
+      }
+      let path = cache.save(key, CacheType.STICKER, combined);
+      RefreshLogger.getInstance().log('STICKER-CACHED', 'url=' + url.substring(0,40) + ' size=' + totalLen);
+      this.stickerCacheVersion++;
+      return path;
+    } catch (_e) {
+      return '';
+    }
   }
 
   toggleVoicePlay(seg: MsgSegment): void {
@@ -591,9 +650,8 @@ export struct MsgBubble {
               }
               if (seg.type === 'image') {
                 if (seg.subType === 1 && seg.url !== '') {
-                  // 动图表情（sub_type=1）用 apngV2 动画渲染（网络 URL）
                   apngV2({
-                    src: seg.url,
+                    src: seg.cachedPath !== '' ? seg.cachedPath : seg.url,
                     speedRate: 1,
                     apngWidth: 120,
                     apngHeight: 120,
