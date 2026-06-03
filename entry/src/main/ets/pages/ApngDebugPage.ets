@@ -2,7 +2,6 @@ import { router } from '@kit.ArkUI';
 import { apngV2, ApngController, Apng } from '@ohos/apng';
 import { RefreshLogger } from '../model/RefreshLogger';
 import emitter from '@ohos.events.emitter';
-import { fileIo } from '@kit.CoreFileKit';
 
 @Entry
 @Component
@@ -48,25 +47,13 @@ struct ApngDebugPage {
 
   async loadFdTest(): Promise<void> {
     try {
-      // 从 rawfile face/0.png 复制到缓存目录
-      let src = await getContext().resourceManager.getRawFileContent('face/0.png');
-      // 先复制 buffer，避免 writeSync 后原 buffer 被 detach
-      let len = src.byteLength;
-      let copyBuf = new ArrayBuffer(len);
-      let copyView = new Uint8Array(copyBuf);
-      copyView.set(new Uint8Array(src.buffer.slice(0, len)));
-      let cachePath = '/data/storage/el2/base/cache/apng_fd_test.png';
-      let file = fileIo.openSync(cachePath, fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE);
-      fileIo.writeSync(file.fd, copyBuf);
-      fileIo.fsyncSync(file.fd);
-      fileIo.closeSync(file);
-      // 重新打开只读保持 fd 存活供 Image fd:// 测试
-      let roFile = fileIo.openSync(cachePath, fileIo.OpenMode.READ_ONLY);
-      this.openFd = roFile.fd;
-      this.fdPath = cachePath;
-      this.fdResult = 'rawfile face/0.png → ' + cachePath + ' size=' + len + ' roFd=' + roFile.fd;
+      // 直接用 rawfile 的 fd，不复制到 sandbox
+      let rawFd = await getContext().resourceManager.getRawFd('face/0.png');
+      this.openFd = rawFd.fd;
+      this.fdPath = 'rawfile face/0.png';
+      this.fdResult = 'offset=' + rawFd.offset + ' length=' + rawFd.length + ' fd=' + rawFd.fd;
       this.fdReady = true;
-      RefreshLogger.getInstance().log('APNGDBG-FD', 'copied face/0.png size=' + len + ' fd=' + roFile.fd);
+      RefreshLogger.getInstance().log('APNGDBG-FD', 'rawFd offset=' + rawFd.offset + ' len=' + rawFd.length + ' fd=' + rawFd.fd);
     } catch (e) {
       RefreshLogger.getInstance().log('APNGDBG-FDERR', 'fd test setup failed: ' + JSON.stringify(e));
     }
@@ -258,7 +245,7 @@ struct ApngDebugPage {
           SectionDivider()
 
           // ====== 本地文件 APNG (fd:// & sandbox path) ======
-          SectionLabel({ label: '本地文件加载 (fd:// & sandbox)', color: '#7B68EE' })
+          SectionLabel({ label: 'fd:// 加载 (rawfile fd, 不复制)', color: '#7B68EE' })
 
           if (this.fdReady) {
             Column() {
@@ -271,10 +258,10 @@ struct ApngDebugPage {
                 .margin({ top: 2 })
 
               Row() {
-                // 1. apngV2 直接用 sandbox 路径
+                // 1. $rawfile (Resource) — 已知能播放
                 Column() {
                   apngV2({
-                    src: '/data/storage/el2/base/cache/apng_fd_test.png',
+                    src: $rawfile('face/0.png'),
                     speedRate: 1,
                     apngWidth: 56,
                     apngHeight: 56,
@@ -282,45 +269,14 @@ struct ApngDebugPage {
                   })
                     .width(56)
                     .height(56)
-                  Text('sandbox路径')
+                  Text('$rawfile')
                     .fontSize(7)
                     .fontColor('#888888')
                 }
                 .alignItems(HorizontalAlign.Center)
                 .margin({ right: 6 })
 
-                // 2. apngV2 用 file:// 前缀
-                Column() {
-                  apngV2({
-                    src: 'file:///data/storage/el2/base/cache/apng_fd_test.png',
-                    speedRate: 1,
-                    apngWidth: 56,
-                    apngHeight: 56,
-                    context: getContext()
-                  })
-                    .width(56)
-                    .height(56)
-                  Text('file://前缀')
-                    .fontSize(7)
-                    .fontColor('#888888')
-                }
-                .alignItems(HorizontalAlign.Center)
-                .margin({ right: 6 })
-
-                // 3. 普通 Image + fd://
-                Column() {
-                  Image('fd://' + this.openFd)
-                    .width(56)
-                    .height(56)
-                    .objectFit(ImageFit.Cover)
-                  Text('Image fd://')
-                    .fontSize(7)
-                    .fontColor('#888888')
-                }
-                .alignItems(HorizontalAlign.Center)
-                .margin({ right: 6 })
-
-                // 4. apngV2 + fd://
+                // 2. apngV2 + fd:// (rawfile fd)
                 Column() {
                   apngV2({
                     src: 'fd://' + this.openFd,
@@ -332,6 +288,19 @@ struct ApngDebugPage {
                     .width(56)
                     .height(56)
                   Text('apngV2 fd://')
+                    .fontSize(7)
+                    .fontColor('#888888')
+                }
+                .alignItems(HorizontalAlign.Center)
+                .margin({ right: 6 })
+
+                // 3. Image + fd:// — 验证 fd 有效
+                Column() {
+                  Image('fd://' + this.openFd)
+                    .width(56)
+                    .height(56)
+                    .objectFit(ImageFit.Cover)
+                  Text('Image fd://')
                     .fontSize(7)
                     .fontColor('#888888')
                 }
