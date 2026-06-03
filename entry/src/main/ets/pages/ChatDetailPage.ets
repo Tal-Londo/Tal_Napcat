@@ -165,7 +165,7 @@ struct ChatDetailPage {
     }
 
     let req: OneBotRequest = OneBotRequest.createGetMsgHistory(
-      this.peerId, this.chatType, undefined, 50);
+      this.peerId, this.chatType, undefined, 100);
     this.wsManager.sendRequestWithCallback(req, (data: Record<string, Object>) => {
       this.handleHistoryResponse(data);
     });
@@ -688,35 +688,105 @@ struct ChatDetailPage {
       return;
     }
     this.loadingMore = true;
+
+    // Phase 1: 本地 DB 补断点
     let oldestTs = this.messages[0].timestamp;
-    RefreshLogger.getInstance().log('CDP-MORE', 'loading from DB before ts=' + oldestTs + ' current=' + this.messages.length);
+    RefreshLogger.getInstance().log('CDP-MORE', 'DB search before ts=' + oldestTs + ' current=' + this.messages.length);
     this.chatStore.getMessagesBefore(this.chatId, oldestTs, 50).then((older: CachedMessage[]) => {
-      if (older.length === 0) {
-        this.hasMore = false;
-        this.loadingMore = false;
-        RefreshLogger.getInstance().log('CDP-MORE', 'no more cached messages');
-        return;
-      }
       let existingIds: Set<number> = new Set();
       for (let m of this.messages) { if (m.messageId > 0) { existingIds.add(m.messageId); } }
-      let newMsgs: CachedMessage[] = [];
-      for (let cm of older) {
-        cm.isSelf = cm.userId === this.selfId;
-        if (cm.messageId > 0 && existingIds.has(cm.messageId)) { continue; }
-        newMsgs.push(cm);
+      let dbMsgs: CachedMessage[] = [];
+      if (older.length > 0) {
+        for (let cm of older) {
+          cm.isSelf = cm.userId === this.selfId;
+          if (cm.messageId > 0 && existingIds.has(cm.messageId)) { continue; }
+          existingIds.add(cm.messageId);
+          dbMsgs.push(cm);
+        }
       }
-      if (newMsgs.length > 0) {
-        newMsgs.sort((a, b) => a.timestamp - b.timestamp);
-        this.messages = [...newMsgs, ...this.messages];
-        this.messagesDataSource.setMessages(this.messages);
-        this.messagesDataSource.notifyDataReload();
-        this.requestArcListFocus();
-        RefreshLogger.getInstance().log('CDP-MORE', 'loaded ' + newMsgs.length + ' from DB, total=' + this.messages.length);
-      } else {
-        this.hasMore = false;
-      }
-      this.loadingMore = false;
+
+      // Phase 2: 远程全量重拉 (NapCat full pagerType)
+      // 用更大 count 让 NapCat 返回更早的消息
+      let pullCount = this.messages.length + 50;
+      RefreshLogger.getInstance().log('CDP-MORE', 'DB found ' + dbMsgs.length + ', remote pull count=' + pullCount);
+      let totalPulled = pullCount;
+      let req: OneBotRequest = OneBotRequest.createGetMsgHistory(
+        this.peerId, this.chatType, undefined, totalPulled);
+      this.wsManager.sendRequestWithCallback(req, (data: Record<string, Object>) => {
+        this.mergeMoreHistory(data, dbMsgs, totalPulled);
+      });
     });
+  }
+
+  mergeMoreHistory(data: Record<string, Object>, dbMsgs: CachedMessage[], remoteLimit: number): void {
+    try {
+      let retcode = data['retcode'] as number ?? 1;
+      if (retcode !== 0) { this.loadingMore = false; return; }
+      let payload = data['data'] as Record<string, Object>;
+      if (payload === undefined) { this.loadingMore = false; return; }
+      let msgArr = payload['messages'] as Object[];
+      if (msgArr === undefined || msgArr.length === 0) {
+        this.hasMore = false;
+        this.loadingMore = false;
+        RefreshLogger.getInstance().log('CDP-MORE', 'remote returned empty');
+        return;
+      }
+      let remoteIds: Set<number> = new Set();
+      let merged: CachedMessage[] = [];
+      for (let item of msgArr) {
+        let obj = item as Record<string, Object>;
+        let msgId = parseInt(String(obj['message_id'] || '0'));
+        if (msgId > 0 && remoteIds.has(msgId)) { continue; }
+        remoteIds.add(msgId);
+        let rawMsg = String(obj['raw_message'] || '');
+        let sender = obj['sender'] as Record<string, Object> || {};
+        let msgTime = parseInt(String(obj['time'] || '0')) * 1000;
+        let cm = this.buildCachedMsg(msgId, sender, obj, rawMsg, msgTime);
+        this.fillSenderRole(cm);
+        merged.push(cm);
+      }
+
+      // 合并: DB -> Remote (DB 可能有网络断点之间的消息)
+      for (let dbm of dbMsgs) {
+        if (!remoteIds.has(dbm.messageId)) {
+          merged.push(dbm);
+          remoteIds.add(dbm.messageId);
+        }
+      }
+      merged.sort((a, b) => a.timestamp - b.timestamp);
+
+      // 清理自己重复的占位
+      let selfKeys: Record<string, number> = {};
+      for (let i = 0; i < merged.length; i++) {
+        let m = merged[i];
+        if (m.isSelf && m.messageId > 0 && m.rawMessage !== '') {
+          selfKeys[m.msgType + '|' + m.rawMessage] = i;
+        }
+      }
+      let cleaned: CachedMessage[] = [];
+      for (let m of merged) {
+        if (m.messageId < 0 && m.isSelf) {
+          if (selfKeys[m.msgType + '|' + m.rawMessage] !== undefined) { continue; }
+        }
+        cleaned.push(m);
+      }
+
+      // 存储远端消息
+      for (let cm of cleaned) {
+        if (cm.messageId > 0) { this.chatStore.saveMessage(cm); }
+      }
+
+      let gained = cleaned.length - this.messages.length;
+      this.messages = cleaned;
+      this.messagesDataSource.setMessages(cleaned);
+      this.messagesDataSource.notifyDataReload();
+      this.requestArcListFocus();
+      RefreshLogger.getInstance().log('CDP-MORE', 'merged ' + cleaned.length + ' total, gained ' + gained);
+      if (msgArr.length < remoteLimit) { this.hasMore = false; }
+    } catch (e) {
+      RefreshLogger.getInstance().log('CDP-MORE-ERR', 'merge error: ' + (e as Error).message);
+    }
+    this.loadingMore = false;
   }
 
   scrollToBottom(): void {
