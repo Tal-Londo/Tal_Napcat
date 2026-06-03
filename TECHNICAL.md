@@ -1,199 +1,140 @@
 # NapcatWatch 技术文档
 
-> QQ for HarmonyOS Watch — 基于 NapCat/OneBot v11 协议的鸿蒙手表 QQ 客户端
+> QQ for HarmonyOS Watch — NapCat/OneBot v11 手表客户端
+> **最后更新: 2026-06-03**
 
 ## 项目概览
 
 | 项目 | 值 |
 |------|-----|
-| 平台 | HarmonyOS NEXT (API 23 / 6.1.0), Stage Mode |
-| 设备 | `wearable` (智能手表) |
-| 构建 | Hvigor (`@ohos/hvigor-ohos-plugin`) |
+| 平台 | HarmonyOS NEXT API 23 (6.1.0), Stage Mode |
+| 设备 | `wearable` (手表) |
+| 构建 | Hvigor + ohpm (`/d/command-line-tools/bin/hvigorw.bat`) |
+| 依赖 | `@ohos/apng` v1.1.4 |
 | 协议 | WebSocket → NapCat → OneBot v11 |
-| DB | SQLite (`napcatwatch_msg.db` + `napcatwatch.db`) |
-| 语言 | ArkTS (TypeScript 方言) |
-| 源码 | 29 个 `.ets` 文件, ~250 KB |
+| WS URL | `ws://super.tkcloud.online:3005/ws?access_token=Nahida2147483647` |
+| 日志 | 上传到 `super.tkcloud.online:8899/upload` |
+| 源码 | 30 个 `.ets` 文件 |
+| 测试 WS | `node -e "const WebSocket=require('ws');..."` in /tmp (npm i ws) |
 
-## 架构图
-
-```
-NapCat Server (WS: super.tkcloud.online:3005)
-    │
-    ▼
-WebSocketManager (连接/重连/心跳/请求响应路由)
-    │
-    ▼
-MessageCenter (消息分发/DB 写入/通知推送)
-    │
-    ├──→ ChatStore (SQLite 持久化)
-    │     ├── chats 表 (会话列表)
-    │     ├── messages 表 (消息记录)
-    │     ├── contacts 表 (好友)
-    │     └── groups 表 (群聊)
-    │
-    ├──→ per-chat handler → ChatDetailPage (聊天界面)
-    └──→ global handler → HomePage (刷新消息列表)
-```
-
-## 页面导航
+## 架构
 
 ```
-SplashPage (启动 → 自动连接)
-  └── HomePage (ArcSwiper 4 页)
-        ├── MessageTab (消息列表)
-        │     └── ChatDetailPage (聊天详情)
-        │           └── MsgBubble (消息气泡)
-        ├── FriendsTab (好友列表)
-        ├── GroupsTab (群聊列表)
-        └── SettingsTab (设置 → 调试页入口)
-
-SendMessagePage (发送消息, 从 ChatDetailPage 跳转)
-MediaViewerPage (图片/视频查看器)
-DebugPage / RefreshLogPage / CrownDebugPage / VideoDebugPage
+NapCat Server (WS)
+  → WebSocketManager (连接/重连/响应路由)
+    → MessageCenter (分发/DB/通知)
+      ├→ ChatStore (SQLite: chats/messages/contacts/groups)
+      ├→ per-chat handler → ChatDetailPage
+      └→ global handler → HomePage (刷新)
 ```
 
-## 关键设计模式
+## 所有页面
 
-### 1. 全局单例
+| 页面 | 功能 |
+|------|------|
+| SplashPage | 启动 → 自动连接 |
+| HomePage | ArcSwiper 4 页: MessageTab/FriendsTab/GroupsTab/SettingsTab |
+| ChatDetailPage | 聊天详情 (`ArcList + LazyForEach + ChatMessagesDataSource`) |
+| SendMessagePage | 发送消息 (文本/表情/@/语音) |
+| ProfilePage | 资料卡 (私聊/群聊/成员) + 免打扰 |
+| MediaViewerPage | 图片/视频查看 (`Video` 组件) |
+| ForwardDetailPage | 合并转发查看 |
+| DebugPage | WS 日志 + 通知测试 + 上传日志/DB |
+| RefreshLogPage | RefreshLogger 日志查看 |
+| CrownDebugPage | 表冠调试 |
+| VideoDebugPage | 视频测试页面 |
+| ApngDebugPage | APNG 动图测试页面 |
+| EditServerPage | 服务器配置 |
 
-`WebSocketManager`, `MessageCenter`, `ChatStore`, `ConfigManager`, `CacheManager`, `RefreshLogger` 都是单例，通过 `Class.getInstance()` 访问。
+## 关键设计
 
-### 2. 消息渲染流水线
-
+### 消息管道
 ```
 CachedMessage[] (@State)
-  → ChatMessagesDataSource (继承 BasicDataSource, 实现 IDataSource)
-    → LazyForEach (ArkUI 虚拟列表)
-      → MsgBubble (@Component, 按 OneBot segment type 渲染)
+  → ChatMessagesDataSource (IDataSource)
+    → LazyForEach → ArcListItem → MsgBubble
 ```
 
-### 3. 自己发送消息的占位/替换机制
+### 自我消息流程
+1. `sendText()` 创建占位 (`messageId = -Date.now()`)
+2. WS `sendRequestWithCallback` 收到 `message_id` 后替换占位
+3. `loadHistory()` 用 `msgType|rawMessage` 复合键去重
 
-```
-sendText():
-  1. 发送 WS send_msg 请求
-  2. 创建占位 CachedMessage (messageId = -timestamp)
-  3. 保存到 DB + 追加到 messages 数组 + 显示
-  4. WS 回调收到真实 message_id 后替换占位的 messageId
-  5. handleHistoryResponse 拉取到同内容消息时删除占位
-```
+### 语音播放
+1. `get_record(file_amr_id, out_format=mp3)` → base64
+2. `buffer.from(b64,'base64')` → 写本地文件 → `fileIo.open(r)` → fd
+3. `AVPlayer.url = 'fd://' + fd` (不能用 `file://`)
 
-### 4. 语音播放流程
+### 视频播放
+- `Video` 组件 + `fixVideoUrl()`: QQ CDN 需 android UA 参数
+- NapCat 不支持视频转码 (`get_record` 对视频 retcode=1200)
 
-```
-点击语音气泡
-  → get_record(file_id, out_format=mp3) WS 请求
-  → 响应返回 base64 字段 (MP3 数据)
-  → buffer.from(b64, 'base64') → 写入本地文件
-  → fileIo.open(r) → 取 fd
-  → AVPlayer.url = 'fd://' + fd → prepare → play
-```
+### 历史消息
+- NapCat `get_group_msg_history` **不支持游标分页**
+- `loadMoreHistory`: Phase1=本地DB(`getMessagesBefore`), Phase2=远程全量重拉(count+50)
+- 首次 `loadHistory`: count=100
 
-**注意**: AVPlayer 必须用 `fd://<n>` 协议, 不能用 `file://`
+## 数据库
 
-### 5. 视频播放流程
-
-```
-打开视频
-  → get_file(file_uuid) WS 请求 (刷新过期 rkey)
-  → fixVideoUrl(): 追加 android 客户端 UA 参数
-    (client_proto=ntv2&client_type=android...)
-  → Video 组件 (autoPlay, controls=false, objectFit=Contain)
-```
-
-**注意**: 必须用 android UA 参数, 否则 QQ CDN 返回 5411006
-
-### 6. WebSocket 消息分发
-
-`handleMessage()` 解析 JSON:
-- 有 `echo` → API 响应回调 (`responseCallbacks` map)
-- 有 `message_type` + `sender` → 补充 `post_type='message'` (NapCat 兼容)
-- 有 `post_type` → 推送给所有 messageListeners
-
-### 7. ArkUI 手表组件
-
-所有列表页使用 `ArcList` + `ArcListItem` (支持表冠旋转)。
-`ChatDetailPage` 的 ArcList id 为 `'chatArcList'`, 每次 notifyDataReload 后调用 `requestArcListFocus()` 保持焦点。
-
-### 8. 通知和后台
-
-- `EntryAbility.onForeground()` → 停止后台任务
-- `EntryAbility.onBackground()` → 启动 dataTransfer 后台长时任务
-- `MessageCenter.processMessage()` → 用户不在聊天页时发布通知
-
-## DB 表结构
-
-### napcatwatch_msg.db
-
+### napcatwatch_msg.db (ChatStore)
 ```sql
-chats: id, chat_id(UNIQUE), chat_type, peer_id, peer_name, last_message, unread_count
-messages: id, message_id, chat_id, user_id, nickname, content, raw_message, msg_type, timestamp
-contacts: id, user_id(UNIQUE), nickname, remark
-groups: id, group_id(UNIQUE), group_name, member_count
+chats(id, chat_id UNIQUE, chat_type, peer_id, peer_name, last_message, unread_count, is_top)
+messages(id, message_id, chat_id, user_id, nickname, content, raw_message, msg_type, timestamp)
+contacts(id, user_id UNIQUE, nickname, remark)
+groups(id, group_id UNIQUE, group_name, member_count)
 ```
+- `getMessagesBefore(chatId, beforeTs, limit)`: WHERE timestamp < `beforeTs` ORDER BY DESC
+- `memberCache`: in-memory `Map<groupId, Map<userId, GroupMember>>`
 
-### napcatwatch.db
-
+### napcatwatch.db (ConfigManager)
 ```sql
-app_config: key(PK), value  -- 简单 KV
+app_config(key TEXT PK, value TEXT)  -- KV存储
+```
+键: `server_url`, `access_token`, `self_id`, `auto_reconnect`, `history_servers`, `muted_chats`, `draft_<chatId>`
+
+## OneBot 请求工厂
+
+| 方法 | action |
+|------|--------|
+| `createSendMsg/SendSegments/SendVoice` | send_msg |
+| `createGetRecord(file, out_format)` | get_record (语音转码) |
+| `createGetFile(file)` | get_file (刷新视频URL) |
+| `createGetMsgHistory(peerId, type, echo, count)` | get_*_msg_history |
+| `createGetForwardMsg(id)` | get_forward_msg |
+| `createGetStrangerInfo(userId)` | get_stranger_info |
+| `createGetGroupDetailInfo(groupId)` | get_group_detail_info |
+| `createGetGroupMemberInfo/List` | get_group_member_info/list |
+
+## HarmonyOS 魔鬼细节
+
+1. **AVPlayer**: 本地文件用 `fd://<n>` 不能 `file://`
+2. **AVRecorder**: 同样用 `fd://` 打开文件
+3. **Video 组件**: QQ CDN 拒绝手表直连, 需仿 android UA
+4. **ArcList 焦点**: 每次 `notifyDataReload` 后要 `requestArcListFocus()`
+5. **后台保活**: `dataTransfer` 仅~6min, `taskKeeping` 需 ACL, 无真正长连接后台
+6. **@arkts 严格限制**: `any/unknown` 不可用, 对象字面量需显式类型, import 默认导出用 `import X from` 非 `import { X } from`
+7. **apngV2**: rawfile 需 `context: getContext()` 参数, 网络 URL 同样
+8. **SymbolGlyph**: `sys.symbol.*` 在手表上不全, 调试入口用纯文字
+9. **scrollBar**: ArcList 的 `BarState.Auto` 在手表上导致偏移, 聊天页用 `Off`
+
+## 已知限制
+
+1. NapCat `get_group_msg_history` 不支持游标分页 (message_seq 被忽略)
+2. NapCat 视频转码不支持 (retcode=1200)
+3. 后台 WebSocket 最长 ~6 分钟存活
+4. 手表无视频画面渲染 (仅音频流)
+5. `@ohos/apng` 需 `context` 参数内联传入
+
+## Build & Test
+
+```bash
+cd "D:/super projec lite/Tal_Napcat/NapcatWatch"
+/d/command-line-tools/bin/hvigorw.bat assembleApp
+/d/command-line-tools/bin/ohpm.bat install
 ```
 
-## ChatDetailPage 关键逻辑
-
-| 场景 | 方法 | 行为 |
-|------|------|------|
-| 进入聊天 | `loadHistory()` | DB 读 100 条 + 双遍去重 (占位跳过同内容真实消息) |
-| 拉取历史 | `handleHistoryResponse()` | 服务器消息合并, 占位匹配替换 |
-| 实时推送 | `handleWsEvent()` | messageId 去重, 追加+fillSenderRole |
-| 返回聊天 | `onPageShow()` → `loadHistorySilent()` | 拾取新占位, 重置未读 |
-| 撤回 | `onRecall()` → `applyRecall()` | 内存中标记 revoked, 未找到 800ms 重试 |
-| 左滑 | PanGesture(Left,30) | → replyMsg() → SendMessagePage |
-
-## MsgBubble 消息段渲染
-
-| type | 渲染 |
-|------|------|
-| text | Text(BREAK_ALL, self=#111 else #EEE) |
-| image | Image(120×120) → onClick → MediaViewerPage |
-| face | Image(22×22) rawfile |
-| at | Text(Bold, #FFB347 self/#4DA6FF others) |
-| reply | Text(Italic, bordered) 显示引用内容 |
-| record | Row(play icon + 语音/播放中/加载中) → get_record + AVPlayer |
-| video | ThumbStack 或 TextRow → MediaViewerPage |
-| file | Text(文件名) |
-
-## OneBot API 封装 (OneBotModel.ets)
-
-| 方法 | action | 参数 |
-|------|--------|------|
-| `createSendMsg` | send_msg | message_type, message[text segment] |
-| `createSendSegments` | send_msg | 任意 segment 数组 |
-| `createSendVoice` | send_msg | record segment (base64) |
-| `createGetRecord` | get_record | file, out_format |
-| `createGetFile` | get_file | file |
-| `createGetMsgHistory` | get_*_msg_history | peer_id, message_id=0, count |
-| `createGetGroupMemberList` | get_group_member_list | group_id |
-
-## 调试入口
-
-| 页面 | 入口 | 功能 |
-|------|------|------|
-| DebugPage | 设置 > "Debug 调试面板" | WS 日志, 上传日志/DB, 通知测试 |
-| RefreshLogPage | 设置 > "消息刷新日志" | RefreshLogger 日志, 上传 |
-| CrownDebugPage | 设置 > "表冠旋转调试" | 聊天列表 + 表冠测试 |
-| VideoDebugPage | 设置 > "视频播放调试" | 直链视频播放测试 |
-
-## 常见问题和修复记录
-
-| 问题 | 根因 | 修复 |
-|------|------|------|
-| 语音无法播放 | AVPlayer 不支持 `file://` 协议 | 改用 `fd://<n>` 协议 |
-| 视频 5411006 | QQ CDN 拒绝手表直连 | 追加 android UA 参数 |
-| 自己消息重复 | 占位与真实消息并存 | 两遍去重 + rawMessage 匹配 |
-| 表冠旋转失效 | notifyDataReload 后焦点丢失 | 每次 reload 后调 requestArcListFocus |
-| 未读数永远是 1 | buildChatItem 写死 1 | 改为从 DB 累加 |
-| DB 只查最旧消息 | getMessages ORDER BY ASC | 改为 ORDER BY DESC + reverse |
-| 连接 UI 不刷新 | SettingsTab 用单回调 | 改用 addStateListener 多监听 |
-| 撤回失败 | loadHistorySilent 整体替换竞态 | 改为内存标记 + 800ms 重试 |
-| 头衔不显示 | 新消息未补 senderRole | MessageFormatter + fillSenderRole |
-| CQ 码丑陋 | raw_message 含 CQ 原码 | stripCQCode() 转文字描述 |
+WS 测试 (在 /tmp):
+```bash
+npm i ws
+node -e "const WebSocket=require('ws'); const ws=new WebSocket('ws://super.tkcloud.online:3005/ws?access_token=Nahida2147483647'); ..."
+```
