@@ -6,6 +6,5 @@
   "author": "NapcatWatch",
   "license": "AGPL-3.0-only",
   "dependencies": {
-    "@ohos/apng": "^1.0.0"
   }
 }

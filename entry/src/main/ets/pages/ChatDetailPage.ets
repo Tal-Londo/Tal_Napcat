@@ -338,7 +338,7 @@ struct ChatDetailPage {
     }
   }
 
-  async handleHistoryResponse(data: Record<string, Object>): Promise<void> {
+  async handleHistoryResponse(data: Record<string, Object>, autoScroll: boolean = true): Promise<void> {
     try {
       let retcode = data['retcode'] as number ?? 1;
       if (retcode !== 0) {
@@ -465,7 +465,9 @@ struct ChatDetailPage {
         this.messagesDataSource.setMessages(newMessages);
         this.messagesDataSource.notifyDataReload();
     this.requestArcListFocus();
-        this.scrollToBottom();
+        if (autoScroll) {
+          this.scrollToBottom();
+        }
       }
       this.inferMyRole();
     } catch (e) {
@@ -712,10 +714,14 @@ struct ChatDetailPage {
     }
 
     if (newMsgs.length > 0) {
+      let addedCount = newMsgs.length;
       this.messages = [...newMsgs, ...this.messages];
       this.messagesDataSource.setMessages(this.messages);
       this.messagesDataSource.notifyDataReload();
       this.requestArcListFocus();
+      // 补偿 prepend 偏移：数组头部多了 addedCount 条，滚到该索引，
+      // 让原本在顶部的消息仍停留在可视顶部，避免视图“往前跳”。
+      this.scrollToLoadedTop(addedCount);
     }
 
     RefreshLogger.getInstance().log('CDP-DB', 'loaded ' + newMsgs.length + ' from DB, total=' + this.messages.length);
@@ -820,6 +826,9 @@ struct ChatDetailPage {
         this.messagesDataSource.setMessages(cleaned);
         this.messagesDataSource.notifyDataReload();
         this.requestArcListFocus();
+        // 补偿 prepend 偏移：cleaned 头部新增了 remoteMsgs.length 条旧消息，
+        // 滚到该索引以保持原顶部消息不动，避免视图“往前跳”。
+        this.scrollToLoadedTop(remoteMsgs.length);
         RefreshLogger.getInstance().log('CDP-RMT', 'added ' + remoteMsgs.length + ' remote, total=' + cleaned.length + ' gap=' + this.hasGap);
       }
 
@@ -854,6 +863,18 @@ struct ChatDetailPage {
     setTimeout(() => {
       this.scrollScroller.scrollEdge(Edge.Bottom);
     }, 100);
+  }
+
+  // 加载更早消息后，数组头部新增 addedCount 条；滚到该索引，
+  // 使原本在顶部的消息仍停留在可视顶部，避免 reload 后“往前跳”。
+  // 延迟与 requestArcListFocus/scrollToMessage 一致，等待 ArcList 布局就绪。
+  scrollToLoadedTop(addedCount: number): void {
+    setTimeout(() => {
+      try {
+        this.scrollScroller.scrollToIndex(addedCount);
+      } catch (_e) {
+      }
+    }, 300);
   }
 
   async sendText(text: string): Promise<void> {
@@ -915,6 +936,14 @@ struct ChatDetailPage {
             let saved = CachedMessage.fromMsg(updated[i]);
             saved.messageId = serverMsgId;
             await this.chatStore.saveMessage(saved);
+            // 已拿到真实 message_id：追加一次异步最新消息获取，
+            // 用服务端真实数据刷新自身消息（图片/视频 URL、转发体等），
+            // 命中 msgType|rawMessage 复合键去重，不重复、autoScroll=false 不抢焦点。
+            let syncReq = OneBotRequest.createGetMsgHistory(
+              this.peerId, this.chatType, 'sync-' + serverMsgId, 50);
+            this.wsManager.sendRequestWithCallback(syncReq, (d: Record<string, Object>) => {
+              this.handleHistoryResponse(d, false);
+            });
             break;
           }
         }

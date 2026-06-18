@@ -9,7 +9,6 @@ import { router } from '@kit.ArkUI';
 import { media } from '@kit.MediaKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { buffer } from '@kit.ArkTS';
-import { apngV2 } from '@ohos/apng';
 import http from '@ohos.net.http';
 
 class MsgSegment {
@@ -650,17 +649,24 @@ export struct MsgBubble {
               }
               if (seg.type === 'image') {
                 if (seg.subType === 1 && seg.url !== '') {
-                  apngV2({
-                    src: seg.cachedPath !== '' ? seg.cachedPath : seg.url,
-                    speedRate: 1,
-                    apngWidth: 120,
-                    apngHeight: 120,
-                    context: getContext()
-                  })
-                    .width(120)
-                    .height(120)
-                    .borderRadius(8)
-                    .margin({ top: 2, bottom: 2 })
+                  // 弃用 apng：动态贴图降级为静态 Image（缓存优先，点击进查看器）
+                  if (seg.cachedPath !== '') {
+                    Image('file://' + seg.cachedPath)
+                      .width(120)
+                      .height(120)
+                      .objectFit(ImageFit.Cover)
+                      .borderRadius(8)
+                      .margin({ top: 2, bottom: 2 })
+                      .onClick(() => { this.openMediaViewer(seg.url, 'image'); })
+                  } else {
+                    Image(seg.url)
+                      .width(120)
+                      .height(120)
+                      .objectFit(ImageFit.Cover)
+                      .borderRadius(8)
+                      .margin({ top: 2, bottom: 2 })
+                      .onClick(() => { this.openMediaViewer(seg.url, 'image'); })
+                  }
                 } else if (seg.url !== '') {
                   if (seg.cachedPath !== '') {
                     Image('file://' + seg.cachedPath)
@@ -686,13 +692,8 @@ export struct MsgBubble {
                 }
               }
               if (seg.type === 'face') {
-                apngV2({
-                  src: this.getFaceResource(seg.faceId),
-                  speedRate: 1,
-                  apngWidth: 22,
-                  apngHeight: 22,
-                  context: getContext()
-                })
+                // 弃用 apng：QQ 表情降级为静态 png（rawfile/face/<id>.png）
+                Image(this.getFaceResource(seg.faceId))
                   .width(22)
                   .height(22)
                   .margin({ left: 1, right: 1, top: 1, bottom: 1 })

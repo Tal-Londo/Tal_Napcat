@@ -1,7 +1,5 @@
 export class FaceStore {
   private static map: Map<number, string> = new Map();
-  // 有 APNG 图片资源的 QQ 表情 ID 集合
-  private static apngIds: Set<number> = new Set();
 
   static init(): void {
     // 来自 Stapxs QQ Lite normalList (小黄脸/通用表情)，映射到近似 Unicode
@@ -72,24 +70,6 @@ export class FaceStore {
     for (let p of unicodePairs) {
       FaceStore.map.set(p[0], p[1]);
     }
-
-    // 标记所有 Stapxs normalList 中的 ID（有 APNG 图片资源）
-    let apngList: number[] = [
-      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-      22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 41, 42,
-      43, 46, 49, 53, 56, 59, 60, 63, 64, 66, 67, 74, 75, 76, 77, 78, 79, 85, 86, 89,
-      96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112,
-      114, 116, 118, 119, 120, 121, 123, 124, 125, 129, 137, 144, 146, 147, 169, 171,
-      172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 185, 187, 201, 212,
-      262, 263, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273, 277, 281, 282, 283,
-      284, 285, 286, 287, 289, 293, 294, 295, 297, 298, 299, 300, 302, 303, 305, 306,
-      307, 311, 312, 323, 324, 325, 326, 332, 333, 334, 336, 337, 338, 339, 341, 342,
-      343, 344, 345, 346, 347, 349, 350, 351, 352, 353, 354, 355, 356, 357, 392, 415,
-      419, 424, 425, 426, 427, 428, 429
-    ];
-    for (let id of apngList) {
-      FaceStore.apngIds.add(id);
-    }
   }
 
   static getFace(faceId: number): string {
@@ -122,15 +102,6 @@ export class FaceStore {
       454, 455, 456, 457, 458, 459, 460, 461, 462, 463, 464, 465, 466, 467, 468, 469,
       470
     ];
-  }
-
-  static getApngUrl(faceId: number): string {
-    return 'https://lib.stapxs.cn/download/stapxs-qq-lite/qq_emoji/' + faceId + '/apng/' + faceId + '.png';
-  }
-
-  // 该 ID 是否在已知的 APNG 资源列表中
-  static hasApng(faceId: number): boolean {
-    return FaceStore.apngIds.has(faceId);
   }
 }
 
