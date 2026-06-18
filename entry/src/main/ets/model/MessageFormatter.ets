@@ -1,3 +1,4 @@
+import { buffer } from '@kit.ArkTS';
 import { OneBotMessage } from './OneBotModel';
 import { CachedMessage, ChatItem } from './ChatStore';
 
@@ -27,10 +28,49 @@ function getDisplayText(msg: OneBotMessage): string {
       else if (stype === 'file') { parts.push('[文件]'); }
       else if (stype === 'reply') { parts.push('[回复]'); }
       else if (stype === 'forward') { parts.push('[聊天记录]'); }
+      else if (stype === 'json') { parts.push(jsonCardSummary(sdata)); }
     }
     return parts.join('');
   }
   return stripCQCode(raw);
+}
+
+/** json 卡片段 → 可读摘要，用于消息预览。当前仅处理群公告(mannounce)。 */
+function jsonCardSummary(sdata: Record<string, Object>): string {
+  try {
+    let raw = sdata['data'] as string || '';
+    if (raw === '') { return '[卡片]'; }
+    let card = JSON.parse(raw) as Record<string, Object>;
+    let app = card['app'] as string || '';
+    if (app === 'com.tencent.mannounce') {
+      let prompt = card['prompt'] as string || '';
+      if (prompt !== '') { return prompt; }
+      // 兜底：解码 title/text
+      let meta = card['meta'] as Record<string, Object>;
+      let title = '';
+      let text = '';
+      if (meta !== undefined && meta !== null) {
+        let ma = meta['mannounce'] as Record<string, Object>;
+        if (ma !== undefined && ma !== null) {
+          title = decodeB64(ma['title'] as string || '');
+          text = decodeB64(ma['text'] as string || '');
+        }
+      }
+      return '[群公告]' + (title !== '' ? title : '') + (text !== '' ? (title !== '' ? '：' : '') + text : '');
+    }
+    return '[卡片]';
+  } catch (_e) {
+    return '[卡片]';
+  }
+}
+
+function decodeB64(b64: string): string {
+  if (b64 === '') { return ''; }
+  try {
+    return buffer.from(b64, 'base64').toString('utf-8');
+  } catch (_e) {
+    return '';
+  }
 }
 
 /** CQ码 → 文字描述，用于消息预览/回复引用等场景 */

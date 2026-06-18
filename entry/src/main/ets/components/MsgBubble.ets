@@ -26,6 +26,11 @@ class MsgSegment {
   videoThumb: string = '';      // video thumbnail URL from data
   forwardId: string = '';       // forward message ID
   forwardContent: string = '';  // JSON array of sub-messages
+  jsonData: string = '';        // json 段原始 data 字符串
+  jsonTitle: string = '';       // 解析后的标题（如群公告标题）
+  jsonText: string = '';        // 解析后的正文
+  jsonPrompt: string = '';      // 卡片 prompt 摘要
+  jsonApp: string = '';         // 卡片 app 标识（com.tencent.mannounce 等）
 }
 
 @Component
@@ -298,6 +303,11 @@ export struct MsgBubble {
               s.forwardContent = JSON.stringify(content);
             }
           }
+          if (s.type === 'json') {
+            s.jsonData = data['data'] as string || '';
+            s.jsonPrompt = data['prompt'] as string || '';
+            this.parseJsonCard(s);
+          }
         }
         result.push(s);
       }
@@ -325,6 +335,39 @@ export struct MsgBubble {
       result.push(seg);
     }
     return result;
+  }
+
+  // 解析 json 卡片段：当前仅处理群公告(com.tencent.mannounce)。
+  // title/text 为 base64(UTF-8) 编码，prompt 为可读摘要。
+  parseJsonCard(s: MsgSegment): void {
+    if (s.jsonData === '') { return; }
+    try {
+      let card = JSON.parse(s.jsonData) as Record<string, Object>;
+      s.jsonApp = card['app'] as string || '';
+      if (s.jsonPrompt === '') {
+        s.jsonPrompt = card['prompt'] as string || '';
+      }
+      if (s.jsonApp === 'com.tencent.mannounce') {
+        let meta = card['meta'] as Record<string, Object>;
+        if (meta !== undefined && meta !== null) {
+          let ma = meta['mannounce'] as Record<string, Object>;
+          if (ma !== undefined && ma !== null) {
+            s.jsonTitle = this.decodeB64Utf8(ma['title'] as string || '');
+            s.jsonText = this.decodeB64Utf8(ma['text'] as string || '');
+          }
+        }
+      }
+    } catch (_e) {
+    }
+  }
+
+  decodeB64Utf8(b64: string): string {
+    if (b64 === '') { return ''; }
+    try {
+      return buffer.from(b64, 'base64').toString('utf-8');
+    } catch (_e) {
+      return '';
+    }
   }
 
   getVoiceCache(fileUuid: string): string {
@@ -805,6 +848,28 @@ export struct MsgBubble {
                     }
                   });
                 })
+              }
+              if (seg.type === 'json' && seg.jsonApp === 'com.tencent.mannounce') {
+                // 群公告卡片：居中系统提示样式（标题 + 正文）
+                Column() {
+                  Text(seg.jsonTitle !== '' ? seg.jsonTitle : '群公告')
+                    .fontSize(12)
+                    .fontColor('#FFB347')
+                    .fontWeight(FontWeight.Bold)
+                    .margin({ bottom: 3 })
+                  if (seg.jsonText !== '') {
+                    Text(seg.jsonText)
+                      .fontSize(11)
+                      .fontColor('#AAAAAA')
+                      .maxLines(6)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }
+                }
+                .padding({ top: 5, bottom: 5, left: 10, right: 10 })
+                .borderWidth(1)
+                .borderColor('#FFB347')
+                .borderRadius(8)
+                .width('100%')
               }
             }, (_seg: MsgSegment, i: number) => i.toString())
           }

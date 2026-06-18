@@ -1,4 +1,5 @@
 import { router, ArcButton, ArcButtonOptions, ArcButtonStyleMode, ArcButtonPosition, LengthUnit, ColorMetrics, LengthMetrics, ArcList, ArcListItem } from '@kit.ArkUI';
+import { buffer } from '@kit.ArkTS';
 import { WebSocketManager } from '../model/WebSocketManager';
 import { ChatStore, CachedMessage, ChatItem, GroupMember } from '../model/ChatStore';
 import { MessageFormatter } from '../model/MessageFormatter';
@@ -519,6 +520,8 @@ struct ChatDetailPage {
           parts.push('[文件]');
         } else if (segType === 'forward') {
           parts.push('[聊天记录]');
+        } else if (segType === 'json') {
+          parts.push(this.jsonCardSummary(segData));
         }
       }
       if (parts.length > 0) {
@@ -539,6 +542,45 @@ struct ChatDetailPage {
     cm.timestamp = msgTime;
     cm.isSelf = cm.userId === this.selfId;
     return cm;
+  }
+
+  // json 卡片段 → 可读摘要（与 MessageFormatter.jsonCardSummary 同逻辑）。
+  // 当前仅处理群公告(com.tencent.mannounce)，其余卡片显示 [卡片]。
+  jsonCardSummary(sdata: Record<string, Object>): string {
+    try {
+      let raw = sdata['data'] as string || '';
+      if (raw === '') { return '[卡片]'; }
+      let card = JSON.parse(raw) as Record<string, Object>;
+      let app = card['app'] as string || '';
+      if (app === 'com.tencent.mannounce') {
+        let prompt = card['prompt'] as string || '';
+        if (prompt !== '') { return prompt; }
+        let meta = card['meta'] as Record<string, Object>;
+        let title = '';
+        let text = '';
+        if (meta !== undefined && meta !== null) {
+          let ma = meta['mannounce'] as Record<string, Object>;
+          if (ma !== undefined && ma !== null) {
+            title = this.decodeB64Utf8(ma['title'] as string || '');
+            text = this.decodeB64Utf8(ma['text'] as string || '');
+          }
+        }
+        return '[群公告]' + (title !== '' ? title : '') +
+          (text !== '' ? (title !== '' ? '：' : '') + text : '');
+      }
+      return '[卡片]';
+    } catch (_e) {
+      return '[卡片]';
+    }
+  }
+
+  decodeB64Utf8(b64: string): string {
+    if (b64 === '') { return ''; }
+    try {
+      return buffer.from(b64, 'base64').toString('utf-8');
+    } catch (_e) {
+      return '';
+    }
   }
 
   handleWsEvent(msg: OneBotMessage): void {
